@@ -358,7 +358,8 @@ async def workspace(request: Request, db: mysql.connector.MySQLConnection = Depe
     cursor.execute("""
         SELECT t.*, e.name as assigned_by_name 
         FROM tasks t 
-        JOIN employee_details e ON t.assigned_by = e.email
+        -- force a common collation on both sides of the JOIN to avoid "Illegal mix of collations" errors
+        JOIN employee_details e ON t.assigned_by COLLATE utf8mb4_unicode_ci = e.email COLLATE utf8mb4_unicode_ci
         WHERE t.assigned_to = %s
         ORDER BY t.created_at DESC
     """, (user_email,))

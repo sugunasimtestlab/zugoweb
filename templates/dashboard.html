@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Employee Profile</title>
+  <!-- Link external CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', path='dashboard.css') }}">
+  <script>
+    // Function to get current location
+    function getLocation() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(showPosition, showError);
+        } else {
+            alert("Geolocation is not supported by this browser.");
+        }
+    }
+
+    function showPosition(position) {
+        // Set the hidden fields for both check-in and check-out forms
+        document.getElementById("latitude_checkin").value = position.coords.latitude;
+        document.getElementById("longitude_checkin").value = position.coords.longitude;
+        document.getElementById("latitude_checkout").value = position.coords.latitude;
+        document.getElementById("longitude_checkout").value = position.coords.longitude;
+    }
+
+    function showError(error) {
+        switch(error.code) {
+            case error.PERMISSION_DENIED:
+                alert("User denied the request for Geolocation. Cannot track attendance.");
+                break;
+            case error.POSITION_UNAVAILABLE:
+                alert("Location information is unavailable.");
+                break;
+            case error.TIMEOUT:
+                alert("The request to get user location timed out.");
+                break;
+            case error.UNKNOWN_ERROR:
+                alert("An unknown error occurred.");
+                break;
+        }
+    }
+
+    // Call getLocation when the dashboard loads
+    window.onload = getLocation;
+
+    function setLocationAndSubmit(form) {
+      const lat = form.querySelector('[name="latitude"]').value;
+      const lon = form.querySelector('[name="longitude"]').value;
+      
+      // Check if location was successfully fetched on load
+      if (!lat || !lon) {
+         // Try to get location again immediately before submitting
+         if (navigator.geolocation) {
+             navigator.geolocation.getCurrentPosition(function(position) {
+                // Set the fields on success and submit
+                form.querySelector('[name="latitude"]').value = position.coords.latitude;
+                form.querySelector('[name="longitude"]').value = position.coords.longitude;
+                form.submit();
+             }, function(error) {
+                alert("Location not detected. Please enable location services and reload.");
+             });
+         } else {
+             alert("Geolocation is not supported by this browser.");
+         }
+         return false; // Prevent default form submission
+      }
+
+      // Location is already set, allow submission
+      return true;
+    }
+
+  </script>
+</head>
+<body>
+
+  <header style="padding: 20px;">
+    <h2>Welcome {{ user.name }}</h2>
+   <h2>Zugo Private Limited</h2>
+   <a href="{{ url_for('workspace') }}" style="color: #FFFFFF; text-decoration: none; padding-right: 30px;">
+    <span>💼 Workspace</span>
+</a>
+    <a href="{{ url_for('logout') }}" style="color: #FFFFFF; text-decoration: none; padding-right: 30px;"><span>🚪 Logout</span></a>
+</header>
+
+  <div class="section-title">Employee</div>
+
+  {% if error %}
+    <p class="error-message">{{ error }}</p>
+  {% endif %}
+  {% if success_message %}
+    <p class="success-message" style="color: green; font-weight: bold; margin-bottom: 15px; text-align: center; width: 100%;">{{ success_message }}</p>
+  {% endif %}
+
+  <div class="card">
+    <!-- Left Side (Photo) -->
+    <div class="photo-section">
+      <strong>Photo</strong>
+      <img src="{{ url_for('static', path=user.photo) }}" alt="Photo">
+      <h2>{{ user.name }}</h2>
+      <br>
+      <br>
+      <div class="detail"><strong>Total Working Days </strong> {{ user.total_working }}</div>
+      <br>
+      <br>
+      <div class="detail"><strong>Total Leaves:</strong> {{ user.total_leave }}</div>
+      
+    </div>
+
+    <!-- Right Side (Details) -->
+    <div class="details-section">
+      <h3>Employee Details</h3>
+      <div class="details-grid">
+        <div class="detail"><strong>Joining Date</strong>{{ user.joining_date }}</div>
+        <div class="detail"><strong>Employee Number</strong>{{ user.employee_number }}</div>
+        <div class="detail"><strong>Name</strong>{{ user.name }}</div>
+        <div class="detail"><strong>Mobile Number</strong>{{ user.phone }}</div>
+        <div class="detail"><strong>Parent Mobile Number</strong>{{ user.parent_phone }}</div>
+        <div class="detail"><strong>Email</strong>{{ user.email }}</div>
+        <div class="detail"><strong>Date of Birth</strong>{{ user.dob }}</div>
+        <div class="detail"><strong>Gender</strong>{{ user.gender }}</div>
+        <div class="detail"><strong>Job Role</strong>{{ user.job_role }}</div>
+        <div class="detail"><strong>Native</strong>{{ user.native }}</div>
+        <div class="detail"><strong>Present Address</strong>{{ user.address }}</div>
+        <div class="detail"><strong>Aadhar Number</strong>{{ user.aadhar }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="button-container">
+    <form method="POST" action="/attendance" onsubmit="return setLocationAndSubmit(this)">
+      <input type="hidden" name="action" value="check-in">
+      <input type="hidden" id="latitude_checkin" name="latitude">
+      <input type="hidden" id="longitude_checkin" name="longitude">
+      <button type="submit" class="btn check-in">✅ Check-In</button>
+    </form>
+    <form method="POST" action="/attendance" onsubmit="return setLocationAndSubmit(this)">
+      <input type="hidden" name="action" value="check-out">
+      <input type="hidden" id="latitude_checkout" name="latitude">
+      <input type="hidden" id="longitude_checkout" name="longitude">
+      <button type="submit" class="btn check-out">🚪 Check-Out</button>
+    </form>
+  </div>
+
+  <div class="attendance-log">
+    <h3>📋 Attendance Log</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Time</th>
+          <th>Action</th>
+          <th>Location</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for record in records | reverse %} 
+        <tr>
+          <td>
+            {% if record.event_time %}
+              {{ record.event_time.strftime('%Y-%m-%d') }}
+            {% else %}
+            
+            {% endif %}
+          </td>
+          <td>
+            {% if record.event_time %}
+              {{ record.event_time.strftime('%H:%M:%S') }}
+            {% else %}
+              N/A
+            {% endif %}
+          </td>
+          <td>{{ record.action | capitalize }}</td>
+          <td>{{ record.location_text }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="4">No attendance records found for the current period.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</body>
+</html>
