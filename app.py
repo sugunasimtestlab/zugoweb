@@ -1,5 +1,6 @@
 import uvicorn
 import mysql.connector
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, date, time, timedelta
 from math import radians, cos, sin, asin, sqrt
@@ -46,6 +47,21 @@ def initialize_database_schema():
             );
         """)
         conn.commit()
+        try:
+            cursor.execute("SELECT 1 FROM employee_details WHERE email = %s LIMIT 1", (config.HR_EMAIL,))
+            hr_row = cursor.fetchone()
+            if not hr_row:
+                default_hr_password = os.getenv("HR_PASSWORD", "zugo@123")
+                # Insert a minimal HR user record
+                cursor.execute(
+                    "INSERT INTO employee_details (name, email, password, job_role) VALUES (%s, %s, %s, %s)",
+                    ("HR", config.HR_EMAIL, default_hr_password, "HR Manager")
+                )
+                conn.commit()
+                print(f"Inserted default HR account: {config.HR_EMAIL}")
+        except Exception as _e:
+            print(f"Warning: could not ensure HR account exists: {_e}")
+
         cursor.close()
         conn.close()
         print("Database schema initialization complete.")
@@ -158,7 +174,7 @@ async def handle_login(
         request.session["user_email"] = email
         if email == config.HR_EMAIL:
             return RedirectResponse(url="/hr-dashboard", status_code=status.HTTP_303_SEE_OTHER)
-        return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url="/report", status_code=status.HTTP_303_SEE_OTHER)
     
     # To show an error, we redirect back to the login page with a query parameter
     return RedirectResponse(url="/?error=Invalid+Credentials", status_code=status.HTTP_303_SEE_OTHER)
@@ -184,31 +200,61 @@ async def signup(
     cursor.close()
     
     request.session["user_email"] = email
-    return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url="/report", status_code=status.HTTP_303_SEE_OTHER)
 
-@app.get("/dashboard", response_class=HTMLResponse, summary="Display employee dashboard")
-async def dashboard(request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
+@app.get("/report", response_class=HTMLResponse, summary="Display employee dashboard")
+async def report(request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
     """Shows the main dashboard for a logged-in employee."""
     user_email = request.session.get("user_email")
     if not user_email:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
-    user_data = fetch_employee_by_email(db, user_email)
-    if not user_data: # If user was deleted but session exists
+    user_data = fetch_employee_by_email(db, user_email) or _build_user_from_static(user_email)
+    if not user_data:
         request.session.clear()
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-        
+
+    # Get today's records for the attendance log
     records = fetch_attendance_for_today(db, user_email)
     sorted_records = sorted(records, key=lambda x: x["event_time"], reverse=True)
 
-    return templates.TemplateResponse("dashboard.html", {
+    # Build monthly report data
+    report_data, total_seconds = _build_report_for_user(db, user_email, days=30)
+    total_hours = total_seconds / 3600 if total_seconds else 0
+
+    return templates.TemplateResponse("report.html", {
         "request": request,
         "user": user_data,
         "records": sorted_records,
+
+          "report_data": report_data,
+        "total_working_hours": f"{total_hours:.2f}",
         "error": request.query_params.get("error"),
         "success": request.query_params.get("success")
     })
 
+@app.get("/dashboard", response_class=HTMLResponse, summary="Display employee dashboard (profile view)")
+async def dashboard_view(request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
+    """Render `dashboard.html` showing the employee's full profile (attendance log removed).
+
+    This route is used when the user clicks the profile circle in the header.
+    """
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    user = fetch_employee_by_email(db, user_email) or _build_user_from_static(user_email)
+    if not user:
+        request.session.clear()
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    # Dashboard no longer includes attendance log (it's on /report)
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "user": user,
+        "error": request.query_params.get("error"),
+        "success": request.query_params.get("success")
+    })
 @app.post("/attendance", summary="Handle check-in/check-out actions")
 async def handle_attendance(
     request: Request,
@@ -227,12 +273,12 @@ async def handle_attendance(
     try:
         if not is_at_office(float(latitude), float(longitude)):
             return RedirectResponse(
-                url=f"/dashboard?error=Location+outside+office+bounds:+{latitude:.6f},+{longitude:.6f}",
+                url=f"/report?error=Location+outside+office+bounds:+{latitude:.6f},+{longitude:.6f}",
                 status_code=status.HTTP_303_SEE_OTHER
             )
     except ValueError:
         return RedirectResponse(
-            url="/dashboard?error=Invalid+location+data.+Please+enable+location+services",
+            url="/report?error=Invalid+location+data.+Please+enable+location+services",
             status_code=status.HTTP_303_SEE_OTHER
         )
 
@@ -260,13 +306,13 @@ async def handle_attendance(
 
         if not (is_morning or is_afternoon):
             return RedirectResponse(
-                url=f"/dashboard?error=Check-in+only+allowed+between+{config.CHECKIN_MORNING_START}+and+{config.CHECKIN_MORNING_END}+or+at+{config.CHECKIN_AFTERNOON_EXACT}",
+                url=f"/report?error=Check-in+only+allowed+between+{config.CHECKIN_MORNING_START}+and+{config.CHECKIN_MORNING_END}+or+at+{config.CHECKIN_AFTERNOON_EXACT}",
                 status_code=status.HTTP_303_SEE_OTHER
             )
 
         if any(r['action'] == 'check-in' for r in todays_records):
             return RedirectResponse(
-                url="/dashboard?error=Already+checked+in+today",
+                url="/report?error=Already+checked+in+today",
                 status_code=status.HTTP_303_SEE_OTHER
             )
 
@@ -274,19 +320,19 @@ async def handle_attendance(
     elif action == "check-out":
         if current_time < config.CHECKOUT_MIN_TIME:
             return RedirectResponse(
-                url=f"/dashboard?error=Check-out+only+allowed+after+{config.CHECKOUT_MIN_TIME}",
+                url=f"/report?error=Check-out+only+allowed+after+{config.CHECKOUT_MIN_TIME}",
                 status_code=status.HTTP_303_SEE_OTHER
             )
 
         if not any(r['action'] == 'check-in' for r in todays_records):
             return RedirectResponse(
-                url="/dashboard?error=Must+check-in+before+checking+out",
+                url="/report?error=Must+check-in+before+checking+out",
                 status_code=status.HTTP_303_SEE_OTHER
             )
 
         if any(r['action'] == 'check-out' for r in todays_records):
             return RedirectResponse(
-                url="/dashboard?error=Already+checked+out+today",
+                url="/report?error=Already+checked+out+today",
                 status_code=status.HTTP_303_SEE_OTHER
             )
 
@@ -317,12 +363,12 @@ async def handle_attendance(
 
         success_msg = f"Successfully+{action.replace('-', '+')}+at+{now.strftime('%I:%M+%p')}"
         return RedirectResponse(
-            url=f"/dashboard?success={success_msg}",
+            url=f"/report?success={success_msg}",
             status_code=status.HTTP_303_SEE_OTHER
         )
     except Exception as e:
         return RedirectResponse(
-            url=f"/dashboard?error=Database+error:+{str(e)}",
+            url=f"/report?error=Database+error:+{str(e)}",
             status_code=status.HTTP_303_SEE_OTHER
         )
 
@@ -335,6 +381,10 @@ async def hr_dashboard(request: Request, db: mysql.connector.MySQLConnection = D
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     hr_user = fetch_employee_by_email(db, user_email)
+    if not hr_user:
+        # If the HR user record is missing for some reason, clear session and redirect to login
+        request.session.clear()
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     employees = fetch_all_employees(db)
     
     # You might want to calculate total working days for the current month here
@@ -382,6 +432,116 @@ async def workspace(request: Request, db: mysql.connector.MySQLConnection = Depe
         "is_hr": is_hr
     })
 
+
+def _build_user_from_static(email: str):
+    """Return a dict user object from the static `static_users` if available."""
+    u = static_users.get(email)
+    if not u:
+        return None
+    # Normalize keys to match DB shape
+    return {
+        "name": u.get("name"),
+        "email": u.get("email", email),
+        "photo": u.get("photo", "profile.jpg"),
+        "phone": u.get("phone"),
+        "employee_number": u.get("employee_number"),
+        "aadhar": u.get("aadhar") or u.get("AADHAR"),
+        "total_working": u.get("total_working", 0),
+        "total_leave": u.get("total_leave", 0),
+    }
+
+
+def _build_report_for_user(db, user_email, days: int = 30):
+    """Build report rows for the last `days` days for the given user.
+
+    Returns list of dicts: {day, check_in, check_out, total_hours}
+    """
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days)
+
+    cursor = db.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT event_time, action FROM attendance
+        WHERE user_email = %s AND event_time BETWEEN %s AND %s
+        ORDER BY event_time ASC
+        """,
+        (user_email, start_date, end_date)
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+
+    # Group by date
+    by_date = {}
+    for r in rows:
+        d = r["event_time"].date().isoformat()
+        by_date.setdefault(d, []).append(r)
+
+    report = []
+    total_working_seconds = 0
+    for day, events in sorted(by_date.items()):
+        # Find earliest check-in and latest check-out
+        check_ins = [e["event_time"] for e in events if e["action"] == "check-in"]
+        check_outs = [e["event_time"] for e in events if e["action"] == "check-out"]
+
+        check_in = min(check_ins).strftime("%I:%M %p") if check_ins else "-"
+        check_out = max(check_outs).strftime("%I:%M %p") if check_outs else "-"
+
+        seconds = 0
+        if check_ins and check_outs:
+            seconds = int((max(check_outs) - min(check_ins)).total_seconds())
+            total_working_seconds += seconds
+
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        total_str = f"{hours}h {minutes}m" if seconds else "-"
+
+        report.append({
+            "day": day,
+            "check_in": check_in,
+            "check_out": check_out,
+            "total_hours": total_str
+        })
+
+    return report, total_working_seconds
+
+
+@app.get("/profile", response_class=HTMLResponse, summary="Display employee profile")
+async def profile(request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
+    """Renders the index/profile page populated from DB or static users."""
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    user = fetch_employee_by_email(db, user_email)
+    if not user:
+        user = _build_user_from_static(user_email)
+    if not user:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    return templates.TemplateResponse("index.html", {"request": request, "user": user})
+
+
+@app.get("/report", response_class=HTMLResponse, summary="Display attendance report")
+async def report_page(request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    user = fetch_employee_by_email(db, user_email) or _build_user_from_static(user_email)
+    if not user:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    report_data, total_seconds = _build_report_for_user(db, user_email, days=30)
+    total_hours = total_seconds / 3600 if total_seconds else 0
+
+    return templates.TemplateResponse("report.html", {
+        "request": request,
+        "report_data": report_data,
+        "user": user,
+        "total_working_hours": f"{total_hours:.2f}"
+    })
+
 @app.get("/logout", summary="Log user out")
 async def logout(request: Request):
     """Clears the user session."""
@@ -394,5 +554,7 @@ async def logout(request: Request):
 # ==============================================================================
 
 if __name__ == "__main__":
+    
     # This runs the ASGI server. Use --reload for development.
     uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
+     

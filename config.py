@@ -32,7 +32,7 @@ OFFICE_RADIUS_METERS = 100 # meters
 
 # Attendance Time Constraints (HH:MM format)
 CHECKIN_MORNING_START = time(9, 30) # 09:30 AM
-CHECKIN_MORNING_END = time(19, 45)   # 09:45 AM
+CHECKIN_MORNING_END = time(9, 45)   # 09:45 AM
 CHECKIN_AFTERNOON_EXACT = time(13, 30) # 01:30 PM
 CHECKOUT_MIN_TIME = time(19, 15)    # 07:15 PM
 

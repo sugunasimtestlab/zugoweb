@@ -4,8 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Employee Profile</title>
+  <link rel="shortcut icon" href="{{ url_for('static', path='favicon.ico') }}" type="image/x-icon">
   <!-- Link external CSS -->
   <link rel="stylesheet" href="{{ url_for('static', path='dashboard.css') }}">
+  
   <script>
     // Function to get current location
     function getLocation() {
@@ -74,14 +76,40 @@
 </head>
 <body>
 
-  <header style="padding: 20px;">
-    <h2>Welcome {{ user.name }}</h2>
-   <h2>Zugo Private Limited</h2>
-   <a href="{{ url_for('workspace') }}" style="color: #FFFFFF; text-decoration: none; padding-right: 30px;">
-    <span>💼 Workspace</span>
-</a>
-    <a href="{{ url_for('logout') }}" style="color: #FFFFFF; text-decoration: none; padding-right: 30px;"><span>🚪 Logout</span></a>
-</header>
+  <header style="padding: 20px; display:flex; justify-content:space-between; align-items:center;">
+    <div>
+      <h2>Welcome {{ user.name }}</h2>
+      <h2 style="font-size:14px; margin-top:2px;">Zugo Private Limited</h2>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <!-- Notifications (bell) -->
+      <div id="notif" style="position:relative; display:inline-block; cursor:pointer;">
+        <span id="notifBell">🔔</span>
+        {% if error or success %}
+        <span id="notifBadge" style="position:absolute; top:-6px; right:-6px; background:#e74c3c; color:white; border-radius:50%; padding:2px 6px; font-size:12px;">1</span>
+        {% endif %}
+        <div id="notifDropdown" style="display:none; position:absolute; right:0; top:26px; background:white; border:1px solid #ddd; box-shadow:0 2px 6px rgba(0,0,0,0.15); width:320px; z-index:200;">
+          <div style="padding:10px; font-weight:bold; border-bottom:1px solid #eee;">Notifications</div>
+          <div style="max-height:200px; overflow:auto;">
+            {% if error %}
+              <div style="padding:10px; border-bottom:1px solid #f5f5f5; color:#c0392b;">⚠️ {{ error | replace('+',' ') }}</div>
+            {% endif %}
+            {% if success %}
+              <div style="padding:10px; border-bottom:1px solid #f5f5f5; color:#2ecc71;">✅ {{ success | replace('+',' ') }}</div>
+            {% endif %}
+            {% if not (error or success) %}
+              <div style="padding:10px; color:#666;">No notifications</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <a href="{{ url_for('workspace') }}" style="color: #FFFFFF; text-decoration: none; padding-right: 12px;">
+        <span>💼 Workspace</span>
+      </a>
+      <a href="{{ url_for('logout') }}" style="color: #FFFFFF; text-decoration: none; padding-right: 12px;"><span>🚪 Logout</span></a>
+    </div>
+  </header>
 
   <div class="section-title">Employee</div>
 
@@ -132,55 +160,13 @@
       <input type="hidden" name="action" value="check-in">
       <input type="hidden" id="latitude_checkin" name="latitude">
       <input type="hidden" id="longitude_checkin" name="longitude">
-      <button type="submit" class="btn check-in">✅ Check-In</button>
     </form>
     <form method="POST" action="/attendance" onsubmit="return setLocationAndSubmit(this)">
-      <input type="hidden" name="action" value="check-out">
+
+   
       <input type="hidden" id="latitude_checkout" name="latitude">
-      <input type="hidden" id="longitude_checkout" name="longitude">
-      <button type="submit" class="btn check-out">🚪 Check-Out</button>
+      <input type="hidden" id="longitude_checkout" name="longitude">    
     </form>
   </div>
-
-  <div class="attendance-log">
-    <h3>📋 Attendance Log</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Time</th>
-          <th>Action</th>
-          <th>Location</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for record in records | reverse %} 
-        <tr>
-          <td>
-            {% if record.event_time %}
-              {{ record.event_time.strftime('%Y-%m-%d') }}
-            {% else %}
-            
-            {% endif %}
-          </td>
-          <td>
-            {% if record.event_time %}
-              {{ record.event_time.strftime('%H:%M:%S') }}
-            {% else %}
-              N/A
-            {% endif %}
-          </td>
-          <td>{{ record.action | capitalize }}</td>
-          <td>{{ record.location_text }}</td>
-        </tr>
-        {% else %}
-        <tr>
-          <td colspan="4">No attendance records found for the current period.</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-
 </body>
 </html>
