@@ -12,8 +12,8 @@
 
 /* Sidebar */
 .sidebar {
-    width: 25%;
-    background-color: #f5f5f5;
+    width: 230px;
+    background-color: #ffffff; /* changed to white for consistency across pages */
     padding: 20px;
     position: fixed;
     height: 100%;
@@ -64,7 +64,7 @@ header {
 .profile-circle {
     width: 30px;
     height: 30px;
-    background-color: rgb(141, 184, 184);
+    background-color: rgb(2, 73, 14);
     border-radius: 50%;
 }
 
@@ -134,14 +134,24 @@ header {
 
 .btn-row {
     margin-top: 20px;
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    width: 100%;
 }
 
 .checkin-btn, .checkout-btn {
-    padding: 10px 20px;
+    padding: 12px 24px;
     border: none;
     cursor: pointer;
-    margin-right: 10px;
     border-radius: 5px;
+    min-width: 140px;
+    font-size: 15px;
+    transition: transform 0.1s ease;
+}
+
+.checkin-btn:active, .checkout-btn:active {
+    transform: scale(0.98);
 }
 
 .checkin-btn { background-color: #1f7a6a; color: white; }

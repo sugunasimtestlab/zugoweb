@@ -4,3 +4,4 @@ python-multipart
 jinja2
 mysql-connector-python
 pydantic
+itsdangerous>=2.1.2

@@ -7,6 +7,8 @@
   <link rel="shortcut icon" href="{{ url_for('static', path='favicon.ico') }}" type="image/x-icon">
   <!-- Link external CSS -->
   <link rel="stylesheet" href="{{ url_for('static', path='dashboard.css') }}">
+  <!-- Reuse the report sidebar styles so dashboard shares the same layout -->
+  <link rel="stylesheet" href="{{ url_for('static', path='report.css') }}">
   
   <script>
     // Function to get current location
@@ -75,98 +77,116 @@
   </script>
 </head>
 <body>
-
-  <header style="padding: 20px; display:flex; justify-content:space-between; align-items:center;">
-    <div>
-      <h2>Welcome {{ user.name }}</h2>
-      <h2 style="font-size:14px; margin-top:2px;">Zugo Private Limited</h2>
+  <div class="container">
+    <!-- Reuse the sidebar from the report page so both pages share the same layout -->
+  <div class="sidebar">
+    <div class="logo">
+            <img src="{{ url_for('static', path='zugo logo.png') }}" alt="Zugo Logo" style="max-width: 120px; height: auto; margin-bottom: 20px;">
+        </div>
+        <ul>
+            <li><a href="{{ url_for('logout') }}">Home page</a></li>
+            <li><a href="{{ url_for('dashboard_view') }}">Overview</a></li>
+            <li><a href="{{ url_for('employees_page') }}">Employee's</a></li>
+            <li class="active"><a href="{{ url_for('report') }}">Attendance</a></li>
+            <li><a href="{{ url_for('workspace') }}">Tasks</a></li>
+        </ul>
+        <div class="help-center">
+            <p>Help Centre</p></br>
+            <p>Terms & Conditions</p></br>
+            <p>Privacy & Policy</p>
+        </div>
     </div>
-    <div style="display:flex; align-items:center; gap:12px;">
-      <!-- Notifications (bell) -->
-      <div id="notif" style="position:relative; display:inline-block; cursor:pointer;">
-        <span id="notifBell">🔔</span>
-        {% if error or success %}
-        <span id="notifBadge" style="position:absolute; top:-6px; right:-6px; background:#e74c3c; color:white; border-radius:50%; padding:2px 6px; font-size:12px;">1</span>
-        {% endif %}
-        <div id="notifDropdown" style="display:none; position:absolute; right:0; top:26px; background:white; border:1px solid #ddd; box-shadow:0 2px 6px rgba(0,0,0,0.15); width:320px; z-index:200;">
-          <div style="padding:10px; font-weight:bold; border-bottom:1px solid #eee;">Notifications</div>
-          <div style="max-height:200px; overflow:auto;">
-            {% if error %}
-              <div style="padding:10px; border-bottom:1px solid #f5f5f5; color:#c0392b;">⚠️ {{ error | replace('+',' ') }}</div>
+
+    <!-- Main Section (matches report layout) -->
+    <div class="main-content">
+
+      <header style="padding: 20px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h2>Welcome {{ user.name }}</h2>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <!-- Notifications (bell) -->
+          <div id="notif" style="position:relative; display:inline-block; cursor:pointer;">
+            <span id="notifBell">🔔</span>
+            {% if error or success %}
+            <span id="notifBadge" style="position:absolute; top:-6px; right:-6px; background:#e74c3c; color:white; border-radius:50%; padding:2px 6px; font-size:12px;">1</span>
             {% endif %}
-            {% if success %}
-              <div style="padding:10px; border-bottom:1px solid #f5f5f5; color:#2ecc71;">✅ {{ success | replace('+',' ') }}</div>
-            {% endif %}
-            {% if not (error or success) %}
-              <div style="padding:10px; color:#666;">No notifications</div>
-            {% endif %}
+            <div id="notifDropdown" style="display:none; position:absolute; right:0; top:26px; background:white; border:1px solid #ddd; box-shadow:0 2px 6px rgba(0,0,0,0.15); width:320px; z-index:200;">
+              <div style="padding:10px; font-weight:bold; border-bottom:1px solid #eee;">Notifications</div>
+              <div style="max-height:200px; overflow:auto;">
+                {% if error %}
+                  <div style="padding:10px; border-bottom:1px solid #f5f5f5; color:#c0392b;">⚠️ {{ error | replace('+',' ') }}</div>
+                {% endif %}
+                {% if success %}
+                  <div style="padding:10px; border-bottom:1px solid #f5f5f5; color:#2ecc71;">✅ {{ success | replace('+',' ') }}</div>
+                {% endif %}
+                {% if not (error or success) %}
+                  <div style="padding:10px; color:#666;">No notifications</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          <div class="profile-icons">
+          <a href="{{ url_for('workspace') }}" style="color: #FFFFFF; text-decoration: none; padding-right: 12px;">
+          </a>
+            <!-- Logout moved to sidebar and relabeled to 'Home page' -->
+        </div>
+      </header>
+
+      {% if error %}
+        <p class="error-message">{{ error }}</p>
+      {% endif %}
+      {% if success_message %}
+        <p class="success-message" style="color: green; font-weight: bold; margin-bottom: 15px; text-align: center; width: 100%;">{{ success_message }}</p>
+      {% endif %}
+
+      <div class="card">
+        <!-- Left Side (Photo) -->
+        <div class="photo-section">
+          <strong>Photo</strong>
+          <img class="profile-photo" src="{{ url_for('static', path=user.photo) }}" alt="Photo">
+          <h2>{{ user.name }}</h2>
+          <br>
+          <br>
+          <div class="detail"><strong>Total Working Days </strong> {{ user.total_working }}</div>
+          <br>
+          <br>
+          <div class="detail"><strong>Total Leaves:</strong> {{ user.total_leave }}</div>
+        </div>
+
+        <!-- Right Side (Details) -->
+        <div class="details-section">
+          <h3>Employee Details</h3>
+          <div class="details-grid">
+            <div class="detail"><strong>Joining Date : </strong>{{ user.joining_date }}</div>
+            <div class="detail"><strong>Employee Number : </strong>{{ user.employee_number }}</div>
+            <div class="detail"><strong>Name : </strong>{{ user.name }}</div>
+            <div class="detail"><strong>Mobile Number : </strong>{{ user.phone }}</div>
+            <div class="detail"><strong>Parent Mobile Number : </strong>{{ user.parent_phone }}</div>
+            <div class="detail"><strong>Email : </strong>{{ user.email }}</div>
+            <div class="detail"><strong>Date of Birth : </strong>{{ user.dob }}</div>
+            <div class="detail"><strong>Gender : </strong>{{ user.gender }}</div>
+            <div class="detail"><strong>Job Role : </strong>{{ user.job_role }}</div>
+            <div class="detail"><strong>Native : </strong>{{ user.native }}</div>
+            <div class="detail"><strong>Present Address : </strong>{{ user.address }}</div>
+            <div class="detail"><strong>Aadhar Number : </strong>{{ user.aadhar }}</div>
           </div>
         </div>
       </div>
 
-      <a href="{{ url_for('workspace') }}" style="color: #FFFFFF; text-decoration: none; padding-right: 12px;">
-        <span>💼 Workspace</span>
-      </a>
-      <a href="{{ url_for('logout') }}" style="color: #FFFFFF; text-decoration: none; padding-right: 12px;"><span>🚪 Logout</span></a>
-    </div>
-  </header>
-
-  <div class="section-title">Employee</div>
-
-  {% if error %}
-    <p class="error-message">{{ error }}</p>
-  {% endif %}
-  {% if success_message %}
-    <p class="success-message" style="color: green; font-weight: bold; margin-bottom: 15px; text-align: center; width: 100%;">{{ success_message }}</p>
-  {% endif %}
-
-  <div class="card">
-    <!-- Left Side (Photo) -->
-    <div class="photo-section">
-      <strong>Photo</strong>
-      <img src="{{ url_for('static', path=user.photo) }}" alt="Photo">
-      <h2>{{ user.name }}</h2>
-      <br>
-      <br>
-      <div class="detail"><strong>Total Working Days </strong> {{ user.total_working }}</div>
-      <br>
-      <br>
-      <div class="detail"><strong>Total Leaves:</strong> {{ user.total_leave }}</div>
-      
-    </div>
-
-    <!-- Right Side (Details) -->
-    <div class="details-section">
-      <h3>Employee Details</h3>
-      <div class="details-grid">
-        <div class="detail"><strong>Joining Date</strong>{{ user.joining_date }}</div>
-        <div class="detail"><strong>Employee Number</strong>{{ user.employee_number }}</div>
-        <div class="detail"><strong>Name</strong>{{ user.name }}</div>
-        <div class="detail"><strong>Mobile Number</strong>{{ user.phone }}</div>
-        <div class="detail"><strong>Parent Mobile Number</strong>{{ user.parent_phone }}</div>
-        <div class="detail"><strong>Email</strong>{{ user.email }}</div>
-        <div class="detail"><strong>Date of Birth</strong>{{ user.dob }}</div>
-        <div class="detail"><strong>Gender</strong>{{ user.gender }}</div>
-        <div class="detail"><strong>Job Role</strong>{{ user.job_role }}</div>
-        <div class="detail"><strong>Native</strong>{{ user.native }}</div>
-        <div class="detail"><strong>Present Address</strong>{{ user.address }}</div>
-        <div class="detail"><strong>Aadhar Number</strong>{{ user.aadhar }}</div>
+      <div class="button-container">
+        <form method="POST" action="/attendance" onsubmit="return setLocationAndSubmit(this)">
+          <input type="hidden" name="action" value="check-in">
+          <input type="hidden" id="latitude_checkin" name="latitude">
+          <input type="hidden" id="longitude_checkin" name="longitude">
+        </form>
+        <form method="POST" action="/attendance" onsubmit="return setLocationAndSubmit(this)">
+          <input type="hidden" id="latitude_checkout" name="latitude">
+          <input type="hidden" id="longitude_checkout" name="longitude">    
+        </form>
       </div>
-    </div>
-  </div>
 
-  <div class="button-container">
-    <form method="POST" action="/attendance" onsubmit="return setLocationAndSubmit(this)">
-      <input type="hidden" name="action" value="check-in">
-      <input type="hidden" id="latitude_checkin" name="latitude">
-      <input type="hidden" id="longitude_checkin" name="longitude">
-    </form>
-    <form method="POST" action="/attendance" onsubmit="return setLocationAndSubmit(this)">
-
-   
-      <input type="hidden" id="latitude_checkout" name="latitude">
-      <input type="hidden" id="longitude_checkout" name="longitude">    
-    </form>
-  </div>
+    </div> <!-- end main-content -->
+  </div> <!-- end container -->
 </body>
 </html>

@@ -1,0 +1,198 @@
+             <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ "HR Dashboard" if is_hr else "Employee Directory" }} - Zugo</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='employee.css') }}" />
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Sidebar (match attendance layout) -->
+        <div class="sidebar">
+            <div class="logo">
+                <img src="{{ url_for('static', path='zugo logo.png') }}" alt="Zugo Logo" style="max-width:120px; height:auto; margin-bottom:16px;">
+            </div>
+            <ul>
+                <li><a href="{{ url_for('logout') }}">Home page</a></li>
+                <li><a href="{{ url_for('dashboard') }}">Overview</a></li>
+                <li><a href="{{ url_for('employees') }}">Employee's</a></li>
+                <li><a href="{{ url_for('attendance_page') }}">Attendance</a></li>
+                <li><a href="{{ url_for('workspace') }}">Tasks</a></li>
+            </ul>
+
+            <div class="help-center">
+                <p>Help Centre</p></br>
+                <p>Terms & Conditions</p></br>
+                <p>Privacy & Policy</p>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="content">
+            <header class="topbar">
+                <div class="search-box">
+                    <input type="text" id="search" placeholder="Search employees..." />
+                </div>
+                <div class="top-icons">
+                    <i>🔔</i>
+                    <a href="{{ url_for('dashboard_view') }}" style="text-decoration:none; color:inherit;"><i>👤</i></a>
+                </div>
+            </header>
+
+            <section class="employee-section">
+                <div class="employee-header">
+                    <h2>{{ "Employee Management" if is_hr else "Employee Directory" }}</h2>
+                    {% if is_hr %}
+                    <div class="buttons">
+                        <button class="btn-green" onclick="openAddEmployeeModal()">Add New Employee</button>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Employee ID</th>
+                                <th>Employee Name</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th>Role</th>
+                                <th>Present Today</th>
+                                {% if is_hr %}
+                                <th>Salary</th>
+                                <th>Actions</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for employee in employees %}
+                            <tr>
+                                <td>{{ employee.employee_number or 'N/A' }}</td>
+                                <td>{{ employee.name }}</td>
+                                <td>{{ employee.email }}</td>
+                                <td>{{ employee.phone or 'N/A' }}</td>
+                                <td>{{ employee.job_role or 'Employee' }}</td>
+                                <td>
+                                    {% if employee.present_today %}
+                                    <span class="status-badge present">Present</span>
+                                    {% else %}
+                                    <span class="status-badge absent">Absent</span>
+                                    {% endif %}
+                                </td>
+                                {% if is_hr %}
+                                <td>₹{{ employee.salary or 'Not Set' }}</td>
+                                <td class="actions">
+                                    <button onclick="editEmployee('{{ employee.email }}')" class="btn-icon edit"><i>✏️</i></button>
+                                    <button onclick="viewDetails('{{ employee.email }}')" class="btn-icon view"><i>👁️</i></button>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="{{ 8 if is_hr else 6 }}">No employee records found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            {% if is_hr %}
+            <!-- Add/Edit Employee Modal (HR Only) -->
+            <div id="employeeModal" class="modal hidden">
+                <div class="modal-content">
+                    <h3 id="modalTitle">Add New Employee</h3>
+                    <form id="employeeForm" method="POST" action="{{ url_for('manage_employee') }}">
+                        <input type="hidden" name="action" value="add">
+                        <input type="hidden" name="email" id="editEmail">
+                        
+                        <div class="form-group">
+                            <label for="name">Full Name</label>
+                            <input type="text" id="name" name="name" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="email">Email</label>
+                            <input type="email" id="email" name="new_email" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="phone">Phone</label>
+                            <input type="tel" id="phone" name="phone">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="role">Role</label>
+                            <input type="text" id="role" name="role">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="salary">Salary</label>
+                            <input type="number" id="salary" name="salary" min="0" step="1000">
+                        </div>
+                        
+                        <div class="modal-actions">
+                            <button type="button" onclick="closeModal()" class="btn btn-outline">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Save</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </main>
+    </div>
+
+    <script>
+        // Search functionality
+        document.getElementById('search').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const rows = document.querySelectorAll('tbody tr');
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(searchTerm) ? '' : 'none';
+            });
+        });
+
+        {% if is_hr %}
+        // Modal functions
+        function openAddEmployeeModal() {
+            const modal = document.getElementById('employeeModal');
+            const form = document.getElementById('employeeForm');
+            const title = document.getElementById('modalTitle');
+            
+            title.textContent = 'Add New Employee';
+            form.reset();
+            form.action.value = 'add';
+            
+            modal.classList.remove('hidden');
+        }
+
+        function editEmployee(email) {
+            const modal = document.getElementById('employeeModal');
+            const title = document.getElementById('modalTitle');
+            const form = document.getElementById('employeeForm');
+            
+            title.textContent = 'Edit Employee';
+            document.getElementById('editEmail').value = email;
+            form.action.value = 'edit';
+            
+            // TODO: Fetch employee details and populate form
+            
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('employeeModal').classList.add('hidden');
+        }
+
+        function viewDetails(email) {
+            // TODO: Implement detailed view
+            console.log('View details for:', email);
+        }
+        {% endif %}
+    </script>
+</body>
+</html>

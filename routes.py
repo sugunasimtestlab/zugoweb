@@ -16,7 +16,10 @@ from services import (
 from config import HR_EMAIL, ATTENDANCE_PERIOD_START_DAY, ATTENDANCE_PERIOD_END_DAY
 
 # This imports the app object created in main.py
-from main import app 
+# Use a Blueprint to avoid importing the app object and circular imports;
+# register this blueprint in main.py with: app.register_blueprint(bp)
+from flask import Blueprint
+bp = Blueprint("routes", __name__)
 
 
 def login_required(f):
@@ -33,10 +36,7 @@ def hr_required(f):
         if "user_email" not in session or session["user_email"] != HR_EMAIL:
             return redirect(url_for("login")) # Or an unauthorized page
         return f(*args, **kwargs)
-    return decorated_function
-
-
-@app.route("/", methods=["GET", "POST"])
+@bp.route("/", methods=["GET", "POST"])
 def login():
     """Handles the login page and form submission."""
     if request.method == "POST":
@@ -53,10 +53,10 @@ def login():
             return redirect(url_for("dashboard"))
         else:
             return render_template("login.html", error="Invalid Credentials")
-    return render_template("login.html")
+@bp.route("/signup", methods=["POST"])
+def signup():
 
-
-@app.route("/signup", methods=["POST"])
+@bp.route("/signup", methods=["POST"])
 def signup():
     """Handles the signup form submission."""
     name = request.form["name"]
@@ -72,18 +72,13 @@ def signup():
 
     session["user_email"] = email
     return redirect(url_for("dashboard"))
-
-
 @app.route("/dashboard", methods=["GET", "POST"])
+@login_required
+@bp.route("/dashboard", methods=["GET", "POST"])
 @login_required
 def dashboard():
     user_email = session["user_email"]
     employee_data = fetch_employee_by_email(user_email)
-
-    if not employee_data:
-        session.pop("user_email", None) # Clear invalid session
-        return redirect(url_for("login"))
-
     error = None
     success_message = None
     date_today = datetime.now().date()
@@ -169,21 +164,18 @@ def dashboard():
         records=attendance_records,
         error=error,
         success_message=success_message
-    )
-
-
+@bp.route("/hr-dashboard")
+@hr_required
+def hr_dashboard():
 @app.route("/hr-dashboard")
 @hr_required
 def hr_dashboard():
     """Displays attendance data for all employees for the current custom attendance period."""
 
-    user_email = session["user_email"]
-    ref_date = datetime.now().date()
-    
-    # Get the dates for the current custom attendance period (e.g., 21st to 20th)
-    start_period, end_period = get_attendance_period_dates(ref_date)
-    
-    all_employees = fetch_all_employees()
+@bp.route("/hr-dashboard")
+@hr_required
+def hr_dashboard():
+    """Displays attendance data for all employees for the current custom attendance period."""
     employee_list = []
 
     for employee in all_employees:
@@ -213,8 +205,8 @@ def hr_dashboard():
         user=user_data,
         period_start=start_period.strftime("%b %d"),
         period_end=end_period.strftime("%b %d")
-    )
-
+@bp.route("/logout")
+def logout():
 
 @app.route("/logout")
 def logout():
@@ -223,3 +215,8 @@ def logout():
     return redirect(url_for("login"))
 
 # The following block referencing 'sorted_records' was removed because 'sorted_records' is not defined and the block is not used in any route or function.
+@bp.route("/logout")
+def logout():
+    """Logs the user out by clearing the session."""
+    session.pop("user_email", None) # Clear user_email from session
+    return redirect(url_for("login"))

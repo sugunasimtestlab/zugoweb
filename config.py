@@ -32,17 +32,17 @@ OFFICE_RADIUS_METERS = 100 # meters
 
 # Attendance Time Constraints (HH:MM format)
 CHECKIN_MORNING_START = time(9, 30) # 09:30 AM
-CHECKIN_MORNING_END = time(9, 45)   # 09:45 AM
+CHECKIN_MORNING_END = time(19, 45)   # 09:45 AM
 CHECKIN_AFTERNOON_EXACT = time(13, 30) # 01:30 PM
 CHECKOUT_MIN_TIME = time(19, 15)    # 07:15 PM
 
 # Email Configuration (ensure these are set in your environment or .env file)
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "your_email@example.com") # e.g., zugopvtnetwork@gmail.com
+SMTP_USER = os.getenv("SMTP_USER", "zugopvtnetwork@gmail.com") # e.g., zugopvtnetwork@gmail.com
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", " ")
 HR_EMAIL = os.getenv("HR_EMAIL", "zugopvtnetwork@gmail.com")  
-MD_EMAIL = os.getenv("MD_EMAIL", "md@yourcompany.com")
+MD_EMAIL = os.getenv("MD_EMAIL", "zugoprivitelimited.com")
 
 # Scheduler Settings
 LEAVE_MARKING_HOUR = 20 # 8 PM UTC

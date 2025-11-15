@@ -20,22 +20,7 @@ users = {
         "total_working": 0 # Will be calculated
     },
     "zugopvtnetwork@gmail.com": { # HR Account
-        "password": "zugo@123",
-        "name": "Zugo Pvt HR",
-        "email": "zugopvtnetwork@gmail.com",
-        "photo": "profile.jpg",
-        "joining_date": "01-01-2020",
-        "employee_number": "HR001",
-        "address": "Bangalore",
-        "phone": "9000000000",
-        "parent_phone": "N/A",
-        "dob": "01-01-1980",
-        "gender": "N/A",
-        "job_role": "HR Manager",
-        "native": "Bangalore",
-        "aadhar": "XXXXXXXXXXXX",
-        "total_leave": 0,
-        "total_working": 0
+        "password": "zugo@123"
     },
     "nandhakumarzugopvt@gmail.com": {
         "password": "nandha123",

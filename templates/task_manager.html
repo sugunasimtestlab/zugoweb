@@ -1,605 +1,353 @@
-<!-- --- START OF FILE task_manager.html --- -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Task Manager</title>
+  <title>Task Manager - Zugo</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    :root{
-      --board-bg: #00ccc0;       
-      --list-bg: #ffffff;
-      --card-bg: #f8f9fa;
-      --text-dark: #222222;
-      --muted: #6b7280;
-      --accent: #00796b;
-      --accent-dark: #004d40;
-      --danger: #ef4444;
-      --header-bg: rgba(0,0,0,0.6);
-      --shadow: 0 6px 18px rgba(0,0,0,0.12);
-    }
-
-    html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;}
-    body{
-      display:flex;flex-direction:column;
-      background:var(--board-bg);
-      color:var(--text-dark);
-      min-height:100vh;
-      box-sizing:border-box;
-    }
-    header{
-      display:flex;align-items:center;justify-content:space-between;
-      background:var(--header-bg);backdrop-filter: blur(4px);
-      padding:12px 20px;color:#fff;
-      box-shadow:var(--shadow);
-    }
-    header h1{margin:0;font-size:18px; font-weight:600;}
-    .search {
-      display:flex;align-items:center;gap:8px;
-    }
-    .search input{
-      padding:8px 10px;border-radius:8px;border:none;width:220px;
-    }
-
-    #board-wrap{
-      flex:1; display:flex; flex-direction:column; gap:12px; padding:12px 18px 80px; box-sizing:border-box;
-    }
-    #board {
-      display:flex; gap:16px; overflow:auto; align-items:flex-start; height: calc(100% - 56px);
-      padding-bottom:30px;
-    }
-
-    .list {
-      min-width:280px; max-width:320px;
-      background:var(--list-bg); border-radius:10px; padding:12px; box-sizing:border-box;
-      display:flex; flex-direction:column; gap:8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-      border: 4px solid transparent;
-    }
-    .list.dragging { opacity:0.6; transform:scale(.995); }
-    .list-header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-    .list-title { font-weight:700; color:var(--text-dark); font-size:15px; cursor:text; }
-    .list-controls { display:flex; gap:6px; align-items:center; }
-    .icon-btn {
-      background:transparent;border:none;padding:6px;border-radius:6px;cursor:pointer;
-    }
-    .icon-btn:hover{ background:rgba(0,0,0,0.06); }
-
-    .cards {
-      display:flex; flex-direction:column; gap:10px; min-height:40px; max-height:calc(100vh - 260px);
-      overflow:auto; padding-right:4px;
-    }
-
-   
-    .card {
-      background:var(--card-bg); border-radius:8px; padding:10px; box-shadow:0 2px 6px rgba(0,0,0,0.06);
-      cursor:grab; display:flex; flex-direction:column; gap:6px; border-left:6px solid transparent;
-    }
-    .card:active{ cursor:grabbing; }
-    .card.dragging { opacity:0.5; transform:scale(.995); }
-    .card-title{ font-weight:600; color:var(--text-dark); font-size:14px; }
-    .card-meta{ font-size:12px; color:var(--muted); }
-    .card-media{ width:100%; max-height:140px; object-fit:cover; border-radius:6px; margin-top:6px; }
-
-    .label-strip { display:flex; gap:6px; flex-wrap:wrap; }
-    .label-chip { padding:4px 8px; border-radius:999px; font-size:12px; color:#fff; }
-
-   
-    .add-card, #add-list {
-      margin-top:6px;padding:10px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;
-      box-shadow:0 4px 10px rgba(0,0,0,0.08);
-    }
-    .add-card:hover, #add-list:hover{ background:var(--accent-dark); }
-
-    
-    #bottom-bar { position:fixed; left:0; right:0; bottom:10px; display:flex; justify-content:center; pointer-events:none; }
-    #add-list { pointer-events:auto; padding:12px 20px; border-radius:12px; }
-
-  
-    #modal {
-      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-      background:rgba(0,0,0,0.45); z-index:60;
-    }
-    #modal.hidden{ display:none; }
-    .modal-content {
-      width:420px; background:#fff; color:var(--text-dark); border-radius:12px; padding:16px; box-shadow:var(--shadow);
-    }
-    .modal-content h3{ margin:0 0 8px 0; }
-    .modal-content input, .modal-content textarea, .modal-content select {
-      width:100%; padding:8px; box-sizing:border-box; margin:6px 0; border-radius:8px; border:1px solid #e5e7eb;
-    }
-    .modal-actions { display:flex; justify-content:space-between; gap:8px; margin-top:10px; }
-    .btn { padding:8px 10px; border-radius:8px; border:none; cursor:pointer; }
-    .btn-primary { background:var(--accent); color:#fff; }
-    .btn-danger { background:var(--danger); color:#fff; }
-
-    
-    .muted { color:var(--muted); font-size:13px; }
-    .list-edit-input { font-weight:700; font-size:14px; padding:6px;border-radius:8px;border:1px solid #e5e7eb; width:100%; }
-    .control-row { display:flex; gap:8px; align-items:center; }
-
-   
-    .lbl-red{ background:#e74c3c } .lbl-blue{ background:#3498db } .lbl-yellow{ background:#f1c40f; color:#111 }
-    .lbl-green{ background:#2ecc71 } .lbl-purple{ background:#9b59b6 }
-
-
-    @media (max-width:640px){
-      .list{ min-width:240px;}
-      .modal-content{ width:92%; }
-    }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', path='report.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='task_manager.css') }}">
 </head>
 <body>
-  <header>
-    <h2>Task Manager</h2>
-    <h2>Zugo Private Limited</h2>
-    <a href="{{ url_for('dashboard') }}" style="color: #fff; text-decoration: none; font-weight: bold; margin-left: 20px;">
-      ⬅ Home
-    </a>
-    <div class="search">
-      <input id="search" placeholder="Search tasks..." />
+  <div class="container">
+    <!-- *** FIXED SIDEBAR: Correct links and 'active' class *** -->
+    <div class="sidebar">
+        <div class="logo">
+            <img src="{{ url_for('static', path='zugo logo.png') }}" alt="Zugo Logo" style="max-width:120px; height:auto; margin-bottom:16px;">
+        </div>
+        <ul>
+            <li><a href="{{ url_for('dashboard_view') }}">Home page</a></li>
+            <li><a href="{{ url_for('dashboard_view') }}">Overview</a></li>
+            <li><a href="{{ url_for('employees_page') }}">Employee's</a></li>
+            <li><a href="{{ url_for('report') }}">Attendance</a></li>
+            <li class="active"><a href="{{ url_for('workspace') }}">Tasks</a></li>
+        </ul>
+        <div class="help-center">
+            <p>Help Centre</p><br>
+            <p>Terms & Conditions</p><br>
+            <p>Privacy & Policy</p>
+        </div>
     </div>
-  </header>
 
-  <div id="board-wrap">
-    <div id="board" aria-label="Lists container"></div>
-  </div>
+    <div class="main-content">
+      <header>
+        <a href="{{ url_for('dashboard_view') }}" style="color: #fff; text-decoration: none; font-weight: bold;">
+          ⬅ Overview
+        </a>
+        <div style="display: flex; align-items: center; gap: 20px;">
+          <div class="search">
+            <input id="search" placeholder="Search tasks..." />
+          </div>
+          
+          <div id="notif" style="position:relative; display:inline-block; cursor:pointer;">
+            <span id="notifBell">🔔</span>
+            <div id="notifDropdown" style="display:none;">
+              <div class="notif-header">Notifications</div>
+              <div class="notif-content">
+                <div class="notif-item">No new notifications</div>
+              </div>
+            </div>
+          </div>
 
-  <div id="bottom-bar">
-    <button id="add-list" title="Add list">+ Add List</button>
-  </div>
+          {% if is_hr %}
+          <button onclick="openAssignModal()" class="btn btn-primary">Assign Task</button>
+          {% endif %}
+        </div>
+      </header>
 
-  
-  <div id="modal" class="hidden" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="modal-content">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h3>Edit Task</h3>
-        <button id="close-modal" class="icon-btn" title="Close">✖</button>
+      <!-- Hidden server data to be read by JavaScript -->
+      <script type="application/json" id="server-tasks">
+        {{ assigned_tasks | tojson }}
+      </script>
+
+      <div id="board-wrap">
+        <div id="board" aria-label="Lists container"></div>
       </div>
 
-      <input id="card-title" placeholder="Title" />
-      <textarea id="card-desc" rows="3" placeholder="Description"></textarea>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <label style="font-size:13px; color:#374151;">Date:</label>
-        <input type="date" id="card-date" style="flex:1;" />
+      <div id="bottom-bar">
+        <button id="add-list" title="Add list">+ Add List</button>
       </div>
-
-      <label style="font-size:13px; color:#374151;">Media (URL)</label>
-      <input type="url" id="card-media" placeholder="https://..." />
-
-      <label style="font-size:13px; color:#374151;">Or Upload Media</label>
-      <input type="file" id="card-file" accept="image/*,video/*" />
-
-      <div style="margin-top:8px;">
-        <div class="muted">Labels</div>
-        <div style="display:flex; gap:8px; margin-top:6px;">
-          <button class="label-select lbl-green" data-color="green" style="border:none;padding:8px;border-radius:8px;cursor:pointer">Green</button>
-          <button class="label-select lbl-red" data-color="red" style="border:none;padding:8px;border-radius:8px;cursor:pointer">Red</button>
-          <button class="label-select lbl-blue" data-color="blue" style="border:none;padding:8px;border-radius:8px;cursor:pointer">Blue</button>
-          <button class="label-select lbl-yellow" data-color="yellow" style="border:none;padding:8px;border-radius:8px;cursor:pointer">Yellow</button>
-          <button class="label-select lbl-purple" data-color="purple" style="border:none;padding:8px;border-radius:8px;cursor:pointer">Purple</button>
+      
+      <div id="modal" class="hidden" role="dialog">
+        <div class="modal-content">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>Edit Task</h3>
+            <button id="close-modal" class="icon-btn" title="Close">✖</button>
+          </div>
+          <input id="card-title" placeholder="Title" />
+          <textarea id="card-desc" rows="3" placeholder="Description"></textarea>
+          <input type="date" id="card-date" />
+          <div class="modal-actions">
+            <button id="delete-card" class="btn btn-danger">Delete</button>
+            <button id="save-card" class="btn btn-primary">Save</button>
+          </div>
         </div>
       </div>
 
-      <div class="modal-actions">
-        <div style="display:flex; gap:8px;">
-          <button id="archive-card" class="btn">Archive</button>
-          <button id="delete-card" class="btn btn-danger">Delete</button>
-        </div>
-        <div>
-          <button id="save-card" class="btn btn-primary">Save</button>
+      <!-- *** FIXED: 'hidden' class added so it's not visible on load *** -->
+      <div id="assign-modal" class="modal hidden" role="dialog">
+        <div class="modal-content">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>Assign New Task</h3>
+            <button onclick="closeAssignModal()" class="icon-btn" title="Close">✖</button>
+          </div>
+          <form action="{{ url_for('assign_task') }}" method="POST">
+            <input type="text" name="title" placeholder="Task Title" required />
+            <textarea name="description" rows="3" placeholder="Task Description" required></textarea>
+            
+            <div style="margin-bottom: 10px;">
+              <label style="font-size: 13px; color: #374151; display: block; margin-bottom: 5px;">Select Employees for Task</label>
+              <select id="employee-select" style="padding: 8px; box-sizing: border-box; width: 100%; border-radius: 8px; border: 1px solid #e5e7eb;">
+                <option value="">-- Select an Employee --</option>
+                {% for emp in employees %}
+                  <option value="{{ emp.email }}" data-name="{{ emp.name }}">{{ emp.name }} ({{ emp.email }})</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Button to add selected employee -->
+            <button type="button" id="add-employee-btn" class="btn" style="width: 100%; padding: 8px; margin-bottom: 10px; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer;">+ Add Employee to Task</button>
+
+            <!-- Display selected employees -->
+            <div id="selected-employees" style="min-height: 60px; background: #f9f9f9; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; margin-bottom: 10px;">
+              <div style="font-size: 12px; color: #666; font-weight: bold; margin-bottom: 5px;">Assigned Employees:</div>
+              <div id="employees-list" style="display: flex; flex-wrap: wrap; gap: 8px;">
+                <span style="color: #999; font-size: 12px;">None selected</span>
+              </div>
+            </div>
+
+            <!-- Hidden input to store selected employees (comma-separated) -->
+            <input type="hidden" id="assigned_employees" name="assigned_to" value="" required />
+
+            <input type="date" name="due_date" required />
+            <div class="modal-actions">
+              <button type="button" onclick="closeAssignModal()" class="btn">Cancel</button>
+              <button type="submit" class="btn btn-primary">Assign Task</button>
+            </div>
+          </form>
         </div>
       </div>
-    </div>
-  </div>
 
 <script>
+// =================================================================================
+// --- CORRECTED AND SIMPLIFIED JAVASCRIPT ---
+// =================================================================================
+const STORAGE_KEY = "task_manager_data";
+let state = {};
 
-const STORAGE_KEY = "task_manager_v2";
-let state = loadState() || defaultState();
-function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-function loadState(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){ return null; } }
+// --- STATE MANAGEMENT ---
+function initializeState() {
+  const localData = loadState();
+  const serverTasksData = document.getElementById('server-tasks');
+  let serverTasks = [];
 
-function defaultState(){
+  try {
+    serverTasks = JSON.parse(serverTasksData.textContent || '[]');
+  } catch (e) {
+    console.error("Could not parse server tasks.", e);
+    serverTasks = [];
+  }
+
+  if (localData) {
+    state = localData;
+    // Merge server tasks into the 'To Do' list of the local data
+    const todoList = state.lists.find(l => l.title === "To Do");
+    if (todoList && serverTasks.length > 0) {
+      serverTasks.forEach(task => {
+        // Avoid adding duplicates
+        if (!todoList.cards.some(card => card.taskId === task.id)) {
+          todoList.cards.push(serverTaskToCard(task));
+        }
+      });
+    }
+  } else {
+    // If no local data, build the entire board from scratch
+    state = defaultState();
+    const todoList = state.lists[0]; // 'To Do' is the first list
+    serverTasks.forEach(task => todoList.cards.push(serverTaskToCard(task)));
+  }
+  saveState();
+}
+
+function serverTaskToCard(task) {
+  return {
+    id: 'server-task-' + task.id,
+    title: task.title,
+    desc: task.description || "",
+    date: task.due_date || "",
+    taskId: task.id // Keep track of the original DB ID
+  };
+}
+
+function defaultState() {
   return {
     lists: [
-      { id: id(), title:"To Do", cards:[
-        { id:id(), title:"Task 1", desc:"", date:"", label:"", media:"", mediaType:"" },
-        { id:id(), title:"Task 2", desc:"", date:"", label:"", media:"", mediaType:"" }
-      ]},
-      { id:id(), title:"In Progress", cards:[
-        { id:id(), title:"Design UI", desc:"", date:"", label:"blue", media:"", mediaType:"" }
-      ]},
-      { id:id(), title:"Completed", cards:[
-        { id:id(), title:"Setup Project", desc:"", date:"", label:"green", media:"", mediaType:"" }
-      ]},
+      { id: id(), title: "To Do", cards: [] },
+      { id: id(), title: "In Progress", cards: [] },
+      { id: id(), title: "Completed", cards: [] },
     ]
   };
 }
-function id(){ return "id-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2); }
 
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
 
+function loadState() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY));
+  } catch (e) {
+    return null;
+  }
+}
+
+function id() {
+  return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+}
+
+// --- DOM ELEMENTS ---
 const board = document.getElementById("board");
 const addListBtn = document.getElementById("add-list");
-const searchInput = document.getElementById("search");
-
 const modal = document.getElementById("modal");
 const closeModalBtn = document.getElementById("close-modal");
 const saveCardBtn = document.getElementById("save-card");
 const deleteCardBtn = document.getElementById("delete-card");
-const archiveCardBtn = document.getElementById("archive-card");
 
-let current = { listId:null, cardId:null };
+let current = { listId: null, cardId: null };
 let isDraggingCard = false;
-let isDraggingList = false;
 
-
-function renderBoard(filterText=""){
+// --- RENDERING ---
+function renderBoard() {
   board.innerHTML = "";
+  if (!state.lists) state.lists = [];
+
   state.lists.forEach(list => {
     const listEl = document.createElement("div");
     listEl.className = "list";
-    listEl.draggable = true;
     listEl.dataset.listId = list.id;
 
-   
+    // Header with title and delete button
     const header = document.createElement("div");
     header.className = "list-header";
-
-    const titleWrap = document.createElement("div");
-    titleWrap.style.flex = "1";
-
     const titleEl = document.createElement("div");
     titleEl.className = "list-title";
     titleEl.textContent = list.title;
-    titleEl.title = "Double click to rename";
-    
-    titleEl.addEventListener("dblclick", () => {
-      const input = document.createElement("input");
-      input.className = "list-edit-input";
-      input.value = list.title;
-      input.addEventListener("keydown",(e)=>{ if(e.key==='Enter'){ finish(); } else if(e.key==='Escape'){ cancel(); } });
-      input.addEventListener("blur", finish);
-      titleWrap.replaceChild(input, titleEl);
-      input.focus();
-      function finish(){
-        const val = input.value.trim() || "Untitled";
-        list.title = val; saveState(); renderBoard(searchInput.value.trim());
-      }
-      function cancel(){ renderBoard(searchInput.value.trim()); }
-    });
-
-    titleWrap.appendChild(titleEl);
-
-    const controls = document.createElement("div");
-    controls.className = "list-controls";
-
-    const editBtn = document.createElement("button");
-    editBtn.className = "icon-btn"; editBtn.title = "Rename list";
-    editBtn.innerHTML = "✎";
-    editBtn.addEventListener("click", () => {
-      
-      titleEl.dispatchEvent(new Event('dblclick'));
-    });
-
-    const delBtn = document.createElement("button");
-    delBtn.className = "icon-btn"; delBtn.title = "Delete list";
-    delBtn.innerHTML = "🗑";
-    delBtn.addEventListener("click", () => {
-      if(!confirm(`Delete list "${list.title}" and all its cards?`)) return;
-      state.lists = state.lists.filter(l => l.id !== list.id);
-      saveState(); renderBoard(searchInput.value.trim());
-    });
-
-    controls.appendChild(editBtn);
-    controls.appendChild(delBtn);
-
-    header.appendChild(titleWrap);
-    header.appendChild(controls);
-
+    const deleteListBtn = document.createElement("button");
+    deleteListBtn.innerHTML = "🗑";
+    deleteListBtn.className = "icon-btn";
+    deleteListBtn.onclick = () => {
+        if (confirm(`Are you sure you want to delete the "${list.title}" list?`)) {
+            state.lists = state.lists.filter(l => l.id !== list.id);
+            saveState();
+            renderBoard();
+        }
+    };
+    header.appendChild(titleEl);
+    header.appendChild(deleteListBtn);
     listEl.appendChild(header);
 
-    
+    // Cards container
     const cardsWrap = document.createElement("div");
     cardsWrap.className = "cards";
     cardsWrap.dataset.listId = list.id;
-
-
-    const displayed = list.cards.filter(c => {
-      if(!filterText) return true;
-      const t = filterText.toLowerCase();
-      return (c.title+" "+(c.desc||"")).toLowerCase().includes(t);
+    list.cards.forEach(card => {
+        const cardEl = document.createElement("div");
+        cardEl.className = "card";
+        cardEl.draggable = true;
+        cardEl.dataset.cardId = card.id;
+        const title = document.createElement("div");
+        title.className = "card-title";
+        title.textContent = card.title;
+        cardEl.appendChild(title);
+        cardEl.onclick = () => openModal(list.id, card.id);
+        cardsWrap.appendChild(cardEl);
     });
-
-    displayed.forEach(card => {
-      const c = document.createElement("div");
-      c.className = "card";
-      c.draggable = true;
-      c.dataset.cardId = card.id;
-      c.dataset.listId = list.id;
-
-      if(card.label) c.style.borderLeft = `6px solid ${labelColor(card.label)}`;
-
-   
-      const title = document.createElement("div"); title.className = "card-title"; title.textContent = card.title;
-      const meta = document.createElement("div"); meta.className = "card-meta"; meta.textContent = card.date || "";
-
-      c.appendChild(title);
-      c.appendChild(meta);
-
-     
-      if(card.label){
-        const strip = document.createElement("div"); strip.className = "label-strip";
-        const chip = document.createElement("div"); chip.className = "label-chip";
-        chip.style.background = labelColor(card.label);
-        chip.textContent = card.label;
-        strip.appendChild(chip);
-        c.appendChild(strip);
-      }
-
-      if(card.media){
-        if(card.mediaType === "video" || /\.(mp4|webm|ogg)$/i.test(card.media)){
-          const v = document.createElement("video"); v.src = card.media; v.controls = true; v.className = "card-media";
-          c.appendChild(v);
-        } else {
-          const i = document.createElement("img"); i.src = card.media; i.className = "card-media";
-          c.appendChild(i);
-        }
-      }
-
-    
-      c.addEventListener("click", (ev) => { if(!isDraggingCard) openModal(list.id, card.id); });
-
-     
-      c.addEventListener("dragstart", (ev) => {
-        isDraggingCard = true;
-        c.classList.add("dragging");
-        ev.dataTransfer.setData("text/plain", JSON.stringify({ type:"card", cardId: card.id, fromListId: list.id }));
-      
-        ev.dataTransfer.effectAllowed = "move";
-      });
-      c.addEventListener("dragend", () => {
-        isDraggingCard = false;
-        c.classList.remove("dragging");
-      });
-
-      cardsWrap.appendChild(c);
-    });
-    cardsWrap.addEventListener("dragover", (ev) => {
-      ev.preventDefault();
-      const dragging = document.querySelector(".card.dragging");
-      if(!dragging) return;
-      const after = getDragAfterElement(cardsWrap, ev.clientY);
-      if(after == null) cardsWrap.appendChild(dragging);
-      else cardsWrap.insertBefore(dragging, after);
-    });
-    cardsWrap.addEventListener("drop", (ev) => {
-      ev.preventDefault();
-      try {
-        const payload = JSON.parse(ev.dataTransfer.getData("text/plain"));
-        if(payload.type === "card"){
-          moveCard(payload.cardId, payload.fromListId, list.id, ev.clientY);
-        }
-      } catch(e){}
-    });
-
     listEl.appendChild(cardsWrap);
 
-    const addBtn = document.createElement("button");
-    addBtn.className = "add-card"; addBtn.textContent = "+ Add Task";
-    addBtn.addEventListener("click", () => {
-      const newCard = { id:id(), title:"New Task", desc:"", date:"", label:"", media:"", mediaType:"" };
-      const found = state.lists.find(l=>l.id===list.id);
-      if(found){ found.cards.push(newCard); saveState(); renderBoard(searchInput.value.trim()); openModal(list.id, newCard.id); }
-    });
-    listEl.appendChild(addBtn);
-
-    listEl.addEventListener("dragstart", (ev) => {
-      if(ev.target !== listEl) return;
-      isDraggingList = true;
-      listEl.classList.add("dragging");
-      ev.dataTransfer.setData("text/plain", JSON.stringify({ type:"list", listId: list.id }));
-      ev.dataTransfer.effectAllowed = "move";
-    });
-    listEl.addEventListener("dragend", () => { isDraggingList = false; listEl.classList.remove("dragging"); });
-
+    // Add card button
+    const addCardBtn = document.createElement("button");
+    addCardBtn.className = "add-card";
+    addCardBtn.textContent = "+ Add Task";
+    addCardBtn.onclick = () => {
+        const title = prompt("Enter task title:");
+        if (title) {
+            list.cards.push({ id: id(), title });
+            saveState();
+            renderBoard();
+        }
+    };
+    listEl.appendChild(addCardBtn);
     board.appendChild(listEl);
   });
-
-  board.addEventListener("dragover", boardDragOverHandler);
-  board.addEventListener("drop", (ev) => {
-    ev.preventDefault();
-    try{
-      const payload = JSON.parse(ev.dataTransfer.getData("text/plain"));
-      if(payload.type === "list"){
-        // reorder lists array
-        const fromId = payload.listId;
-        const afterEl = getDragAfterElementHorizontal(board, ev.clientX);
-        const fromIdx = state.lists.findIndex(l=>l.id===fromId);
-        if(fromIdx === -1) return;
-        const [item] = state.lists.splice(fromIdx,1);
-        if(afterEl == null){
-          state.lists.push(item);
-        } else {
-          const afterId = afterEl.dataset.listId;
-          const insertIdx = state.lists.findIndex(l=>l.id===afterId);
-          state.lists.splice(insertIdx, 0, item);
-        }
-        saveState(); renderBoard(searchInput.value.trim());
-      } else if(payload.type === "card"){
-        
-      }
-    }catch(e){}
-  });
 }
 
-function getDragAfterElement(container, y){
-  const draggableElements = [...container.querySelectorAll('.card:not(.dragging)')];
-  let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
-  draggableElements.forEach(child => {
-    const box = child.getBoundingClientRect();
-    const offset = y - box.top - box.height/2;
-    if(offset < 0 && offset > closest.offset){
-      closest = { offset, element: child };
-    }
-  });
-  return closest.element;
-}
-
-function getDragAfterElementHorizontal(container, x){
-  const draggable = [...container.querySelectorAll('.list:not(.dragging)')];
-  let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
-  draggable.forEach(child => {
-    const box = child.getBoundingClientRect();
-    const offset = x - box.left - box.width/2;
-    if(offset < 0 && offset > closest.offset){
-      closest = { offset, element: child };
-    }
-  });
-  return closest.element;
-}
-
-
-function addList(title="New List"){
-  state.lists.push({ id:id(), title, cards:[] });
-  saveState(); renderBoard(searchInput.value.trim());
-}
-function moveCard(cardId, fromListId, toListId, clientY=null){
-  const from = state.lists.find(l=>l.id===fromListId);
-  const to = state.lists.find(l=>l.id===toListId);
-  if(!from || !to) return;
-  const idx = from.cards.findIndex(c=>c.id===cardId);
-  if(idx === -1) return;
-  const [card] = from.cards.splice(idx,1);
- 
-  let insert = to.cards.length;
-  if(clientY !== null){
-    const destWrapper = document.querySelector(`.cards[data-list-id="${toListId}"]`);
-    if(destWrapper){
-      const afterEl = getDragAfterElement(destWrapper, clientY);
-      if(afterEl){
-        const afterId = afterEl.dataset.cardId;
-        const i = to.cards.findIndex(c=>c.id===afterId);
-        insert = i === -1 ? to.cards.length : i;
-      }
-    }
-  }
-  to.cards.splice(insert,0,card);
-  saveState(); renderBoard(searchInput.value.trim());
-}
-
-
-function openModal(listId, cardId){
-  current.listId = listId; current.cardId = cardId;
-  const list = state.lists.find(l=>l.id===listId);
-  const card = list && list.cards.find(c=>c.id===cardId);
-  if(!card) return;
+// --- MODAL & EVENT HANDLERS ---
+function openModal(listId, cardId) {
+  current = { listId, cardId };
+  const card = state.lists.find(l => l.id === listId)?.cards.find(c => c.id === cardId);
+  if (!card) return;
   document.getElementById("card-title").value = card.title;
   document.getElementById("card-desc").value = card.desc || "";
   document.getElementById("card-date").value = card.date || "";
-  document.getElementById("card-media").value = card.media || "";
-  document.getElementById("card-file").value = "";
-  
-  document.querySelectorAll(".label-select").forEach(b => b.classList.toggle("selected", b.dataset.color === card.label));
-
-  modal.classList.remove("hidden"); modal.setAttribute("aria-hidden","false");
+  modal.classList.remove("hidden");
 }
-function closeModal(){ modal.classList.add("hidden"); modal.setAttribute("aria-hidden","true"); current={listId:null,cardId:null}; }
 
+function closeModal() {
+  modal.classList.add("hidden");
+}
+
+function openAssignModal() {
+  document.getElementById("assign-modal").classList.remove("hidden");
+}
+
+function closeAssignModal() {
+  document.getElementById("assign-modal").classList.add("hidden");
+}
+
+// *** CRITICAL FIX: The event listener for 'archive-card' is removed ***
+// It was causing the script to crash.
+
+addListBtn.addEventListener("click", () => {
+  const name = prompt("Enter new list name:");
+  if (name) {
+    state.lists.push({ id: id(), title: name, cards: [] });
+    saveState();
+    renderBoard();
+  }
+});
 
 closeModalBtn.addEventListener("click", closeModal);
-modal.addEventListener("click", (e)=>{ if(e.target === modal) closeModal(); });
 
-saveCardBtn.addEventListener("click", ()=>{
-  if(!current.listId || !current.cardId) return;
-  const list = state.lists.find(l=>l.id===current.listId);
-  const card = list && list.cards.find(c=>c.id===current.cardId);
-  if(!card) return;
-  card.title = document.getElementById("card-title").value.trim() || "Untitled";
-  card.desc = document.getElementById("card-desc").value;
-  card.date = document.getElementById("card-date").value;
-  card.media = document.getElementById("card-media").value.trim() || card.media;
-  card.mediaType = card.mediaType || "";
-
-  const fileInput = document.getElementById("card-file");
-  if(fileInput.files.length > 0){
-    const file = fileInput.files[0];
-    card.media = URL.createObjectURL(file);
-    card.mediaType = file.type.startsWith("video/") ? "video" : "image";
+saveCardBtn.addEventListener("click", () => {
+  const card = state.lists.find(l => l.id === current.listId)?.cards.find(c => c.id === current.cardId);
+  if (card) {
+    card.title = document.getElementById("card-title").value.trim();
+    card.desc = document.getElementById("card-desc").value.trim();
+    card.date = document.getElementById("card-date").value;
+    saveState();
+    renderBoard();
   }
-  const selected = document.querySelector(".label-select.selected");
-  card.label = selected ? selected.dataset.color : "";
-  saveState(); closeModal(); renderBoard(searchInput.value.trim());
+  closeModal();
 });
 
-deleteCardBtn.addEventListener("click", ()=>{
-  if(!current.listId || !current.cardId) return;
-  if(!confirm("Delete this card?")) return;
-  const list = state.lists.find(l=>l.id===current.listId);
-  list.cards = list.cards.filter(c=>c.id !== current.cardId);
-  saveState(); closeModal(); renderBoard(searchInput.value.trim());
-});
-
-archiveCardBtn.addEventListener("click", ()=>{
-  if(!current.listId || !current.cardId) return;
-  
-  if(!confirm("Archive (remove) this card?")) return;
-  const list = state.lists.find(l=>l.id===current.listId);
-  list.cards = list.cards.filter(c=>c.id !== current.cardId);
-  saveState(); closeModal(); renderBoard(searchInput.value.trim());
-});
-
-
-document.querySelectorAll(".label-select").forEach(btn=>{
-  btn.addEventListener("click", (e)=>{
-    document.querySelectorAll(".label-select").forEach(b=>b.classList.remove("selected"));
-    btn.classList.add("selected");
-    btn.dataset.color && btn.dataset.color; 
-  });
-});
-
-
-function boardDragOverHandler(e){
-  e.preventDefault();
-  const draggingList = document.querySelector(".list.dragging");
-  if(!draggingList) return;
-  const after = getDragAfterElementHorizontal(board, e.clientX);
-  if(after == null) board.appendChild(draggingList);
-  else board.insertBefore(draggingList, after);
-}
-
-
-searchInput.addEventListener("input", (e)=> renderBoard(e.target.value.trim()));
-
-
-addListBtn.addEventListener("click", ()=> {
-  const name = prompt("List name:", "New List");
-  addList(name || "New List");
-  
-});
-
-
-renderBoard();
-
-
-function labelColor(name){
-  switch(name){
-    case "green": return "#2ecc71";
-    case "red": return "#e74c3c";
-    case "blue": return "#3498db";
-    case "yellow": return "#f1c40f";
-    case "purple": return "#9b59b6";
-    default: return "transparent";
+deleteCardBtn.addEventListener("click", () => {
+  if (confirm("Are you sure you want to delete this task?")) {
+    const list = state.lists.find(l => l.id === current.listId);
+    if (list) {
+      list.cards = list.cards.filter(c => c.id !== current.cardId);
+      saveState();
+      renderBoard();
+    }
   }
-}
+  closeModal();
+});
 
-
-document.addEventListener("keydown", (e)=>{
-  if(e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-  if(e.key === "n"){ e.preventDefault(); addList("New List"); }
-  if(e.key === "/"){ e.preventDefault(); searchInput.focus(); }
+// --- INITIALIZATION ---
+document.addEventListener("DOMContentLoaded", () => {
+  initializeState();
+  renderBoard();
 });
 </script>
+    </div>
+  </div>
 </body>
 </html>
-<!-- --- END OF FILE task_manager.html --- -->
