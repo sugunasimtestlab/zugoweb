@@ -58,6 +58,9 @@ def initialize_database_schema():
                 joining_date VARCHAR(50),
                 native VARCHAR(255),
                 address TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                pan_card VARCHAR(50),
+                bank_details TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                salary VARCHAR(50),
                 total_leave INT DEFAULT 0,
                 total_working INT DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -146,14 +149,17 @@ def initialize_database_schema():
                 native = user_data.get("native")
                 address = user_data.get("address")
                 job_role = user_data.get("job_role", "Employee")
+                pan_card = user_data.get("pan_card")
+                bank_details = user_data.get("bank_details")
+                salary = user_data.get("salary")
                 
                 cursor3.execute(
                     """INSERT INTO employee_details 
                        (name, email, password, photo, phone, parent_phone, dob, gender, 
-                        employee_number, aadhar, joining_date, native, address, job_role)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        employee_number, aadhar, joining_date, native, address, job_role, pan_card, bank_details, salary)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     (name, email, password, photo, phone, parent_phone, dob, gender,
-                     employee_number, aadhar, joining_date, native, address, job_role)
+                     employee_number, aadhar, joining_date, native, address, job_role, pan_card, bank_details, salary)
                 )
             conn.commit()
             cursor3.close()
@@ -364,7 +370,7 @@ def mark_notification_as_read(db: mysql.connector.MySQLConnection, notification_
 
 
 # ===========================================================================
-# API ROUTES (ENDPOINTS)
+# API ROUTTES (ENDPOINTS)
 # ===========================================================================
 
 @app.get("/", response_class=HTMLResponse, summary="Display login page")
@@ -413,18 +419,9 @@ async def signup(
         native = user_data.get("native")
         address = user_data.get("address")
         job_role = user_data.get("job_role", "Employee")
-    else:
-        photo = "profile.jpg"
-        phone = None
-        parent_phone = None
-        dob = None
-        gender = None
-        employee_number = None
-        aadhar = None
-        joining_date = None
-        native = None
-        address = None
-        job_role = "Employee"
+        pan_card = user_data.get("pan_card")
+        bank_details = user_data.get("bank_details")
+        salary = user_data.get("salary")
     
     cursor = db.cursor()
     cursor.execute(
@@ -448,6 +445,10 @@ async def report(request: Request, db: mysql.connector.MySQLConnection = Depends
     if not user_email:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
+    # Redirect HR to HR Management page instead of employee report
+    if user_email == config.HR_EMAIL:
+        return RedirectResponse(url="/hr-management", status_code=status.HTTP_303_SEE_OTHER)
+
     user_data = fetch_employee_by_email(db, user_email) or _build_user_from_static(user_email)
     if not user_data:
         request.session.clear()
@@ -461,6 +462,8 @@ async def report(request: Request, db: mysql.connector.MySQLConnection = Depends
     report_data, total_seconds = _build_report_for_user(db, user_email, days=30)
     total_hours = total_seconds / 3600 if total_seconds else 0
 
+    is_hr = user_email == config.HR_EMAIL
+
     return templates.TemplateResponse("report.html", {
         "request": request,
         "user": user_data,
@@ -468,7 +471,8 @@ async def report(request: Request, db: mysql.connector.MySQLConnection = Depends
         "report_data": report_data,
         "total_working_hours": f"{total_hours:.2f}",
         "error": request.query_params.get("error"),
-        "success": request.query_params.get("success")
+        "success": request.query_params.get("success"),
+        "is_hr": is_hr
     })
 
 
@@ -507,6 +511,10 @@ async def dashboard_view(request: Request, db: mysql.connector.MySQLConnection =
     user_email = request.session.get("user_email")
     if not user_email:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+    # Redirect HR to HR Management page instead of employee dashboard
+    if user_email == config.HR_EMAIL:
+        return RedirectResponse(url="/hr-management", status_code=status.HTTP_303_SEE_OTHER)
 
     user = fetch_employee_by_email(db, user_email) or _build_user_from_static(user_email)
     if not user:
@@ -674,6 +682,10 @@ async def assign_task(
     user_email = request.session.get("user_email")
     if not user_email or user_email != config.HR_EMAIL:
         raise HTTPException(status_code=403, detail="Only HR can assign tasks")
+    
+    # Prevent HR from assigning task to themselves
+    if assigned_to == config.HR_EMAIL:
+        return RedirectResponse(url="/workspace?error=Cannot+assign+task+to+HR", status_code=303)
     
     cursor = db.cursor()
     try:
@@ -849,110 +861,6 @@ async def employees_page(request: Request, db: mysql.connector.MySQLConnection =
     if not user_email:
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
         
-    is_hr = user_email == config.HR_EMAIL
-    all_employees = fetch_all_employees(db)
-    
-    try:
-        cursor = db.cursor()
-        today = date.today()
-        for emp in all_employees:
-            email = emp.get("email")
-            if email:
-                cursor.execute(
-                    "SELECT 1 FROM attendance WHERE user_email = %s AND DATE(event_time) = %s LIMIT 1",
-                    (email, today)
-                )
-                emp["present_today"] = bool(cursor.fetchone())
-                
-                if is_hr:
-                    cursor.execute("SELECT salary FROM employee_details WHERE email = %s", (email,))
-                    salary_row = cursor.fetchone()
-                    emp["salary"] = salary_row[0] if salary_row else None
-        cursor.close()
-    except Exception:
-        for emp in all_employees:
-            emp["present_today"] = False
-            if is_hr: emp["salary"] = None
-                
-    return templates.TemplateResponse("employee_list.html", {
-        "request": request, "employees": all_employees, "is_hr": is_hr
-    })
-
-
-@app.get("/api/notifications", summary="Get notifications for current user")
-async def get_notifications(request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
-    """Return unread notifications as JSON."""
-    user_email = request.session.get("user_email")
-    if not user_email:
-        return JSONResponse({"notifications": [], "count": 0}, status_code=401)
-    
-    notifications = fetch_notifications_for_user(db, user_email)
-    return JSONResponse({
-        "notifications": notifications,
-        "count": len(notifications)
-    })
-
-
-@app.post("/api/notifications/mark-read", summary="Mark notification as read")
-async def mark_notification_read(request: Request, notification_id: int = Form(...), db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
-    """Mark a notification as read."""
-    user_email = request.session.get("user_email")
-    if not user_email:
-        return JSONResponse({"error": "Not authenticated"}, status_code=401)
-    
-    mark_notification_as_read(db, notification_id)
-    return JSONResponse({"status": "success"})
-
-    
-@app.get("/logout", summary="Log user out")
-async def logout(request: Request):
-    """Clears the user session."""
-    request.session.clear()
-    return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
-@app.post("/update-task-status")
-async def update_task_status(request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
-    """Update task status"""
-    user_email = request.session.get("user_email")
-    if not user_email:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    try:
-        body = await request.json()
-        task_id = body.get("taskId")
-        new_status = body.get("status")
-        
-        if not task_id or not new_status:
-            raise HTTPException(status_code=400, detail="Missing taskId or status")
-            
-        cursor = db.cursor()
-        cursor.execute("SELECT 1 FROM tasks WHERE id = %s AND assigned_to = %s", (task_id, user_email))
-        if not cursor.fetchone():
-            cursor.close()
-            raise HTTPException(status_code=403, detail="Not authorized to update this task")
-        
-        cursor.execute("UPDATE tasks SET status = %s WHERE id = %s", (new_status, task_id))
-        db.commit()
-        cursor.close()
-        
-        return {"success": True}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# =================================================================
-# MAIN EXECUTION
-# ==============================================================================
-
-if __name__ == "__main__":
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
-@app.get("/employees", response_class=HTMLResponse)
-async def employees_page(request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
-    user_email = request.session.get("user_email")
-    if not user_email:
-        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-        
     # Get current user's role
     is_hr = user_email == config.HR_EMAIL
     
@@ -1066,6 +974,42 @@ async def update_task_status(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/hr-management", response_class=HTMLResponse, summary="HR Management Dashboard")
+async def hr_management(request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
+    """HR-only page showing all employees with salary and privacy details."""
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    
+    # Check if user is HR
+    if user_email != config.HR_EMAIL:
+        return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    
+    # Fetch all employees EXCEPT HR email
+    cursor = db.cursor(dictionary=True)
+    cursor.execute(
+        "SELECT * FROM employee_details WHERE email != %s ORDER BY name ASC",
+        (config.HR_EMAIL,)
+    )
+    employees = cursor.fetchall()
+    cursor.close()
+    
+    # Merge with static data to get salary info
+    for emp in employees:
+        static_data = static_users.get(emp['email'], {})
+        if 'salary' in static_data:
+            emp['salary'] = static_data['salary']
+        else:
+            emp['salary'] = 'Not Set'
+    
+    return templates.TemplateResponse("hr_management.html", {
+        "request": request,
+        "employees": employees,
+        "is_hr": True,
+        "user_email": user_email
+    })
 
 
 # =================================================================

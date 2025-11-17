@@ -89,6 +89,9 @@
             <li><a href="{{ url_for('employees_page') }}">Employee's</a></li>
             <li class="active"><a href="{{ url_for('report') }}">Attendance</a></li>
             <li><a href="{{ url_for('workspace') }}">Tasks</a></li>
+            {% if is_hr %}
+            <li><a href="{{ url_for('hr_management') }}" style="color: #e74c3c; font-weight: bold;">⚙️ Management</a></li>
+            {% endif %}
         </ul>
         <div class="help-center">
             <p>Help Centre</p></br>
@@ -170,6 +173,8 @@
             <div class="detail"><strong>Native : </strong>{{ user.native }}</div>
             <div class="detail"><strong>Present Address : </strong>{{ user.address }}</div>
             <div class="detail"><strong>Aadhar Number : </strong>{{ user.aadhar }}</div>
+            <div class="detail"><strong>Pan Number : </strong>{{ user.pan }}</div>
+            <div class="detail"><strong>Bank details : </strong>{{ user.bank_details}}</div>
           </div>
         </div>
       </div>

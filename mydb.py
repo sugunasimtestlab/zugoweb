@@ -1,7 +1,7 @@
 import os
 import mysql.connector
 from datetime import datetime
-from config import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
+from config import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, HR_EMAIL
 import json
 
 
@@ -229,7 +229,7 @@ def fetch_all_employees():
     conn = get_connection()
     try:
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM employee_details")
+        cursor.execute("SELECT * FROM employee_details WHERE email != %s", (HR_EMAIL,))
         return cursor.fetchall()
     finally:
         cursor.close()
