@@ -2,6 +2,10 @@
 import math
 import io
 import csv
+import config
+from math import radians, cos, sin, asin, sqrt
+from typing import Optional, List, Dict
+
 import smtplib
 from email.message import EmailMessage
 from datetime import datetime, date, timedelta
@@ -15,22 +19,24 @@ from config import (
 )
 from mydb import (
     fetch_attendance_for_period, fetch_all_employees,
-    update_employee_leave, fetch_monthly_attendance_all, get_connection # For monthly report (calendar month)
+    update_employee_leave, fetch_monthly_attendance_all, get_connection  # For monthly report (calendar month)
 )
 
+# ===========================================================================
+# SERVICE FUNCTIONS (Business Logic)
+# ===========================================================================
 
-def haversine(lat1, lon1, lat2, lon2):
-    """Calculate the great circle distance between two points on the earth (specified in decimal degrees)."""
-    R = 6371000  # Radius of earth in meters
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
-    c = 2 * math.asin(math.sqrt(a))
-    return R * c
+def is_at_office(lat: float, lon: float) -> bool:
+    """Check if a location is within the office radius."""
+    def haversine(lat1, lon1, lat2, lon2):
+        R = 6371000  # Earth radius in meters
+        dlat = radians(lat2 - lat1)
+        dlon = radians(lon2 - lon1)
+        a = sin(dlat / 2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2)**2
+        c = 2 * asin(sqrt(a))
+        return R * c
+    return haversine(lat, lon, config.OFFICE_LAT, config.OFFICE_LON) <= config.OFFICE_RADIUS_METERS
 
-def is_at_office(lat, lon):
-    """Check if the given lat/lon is within OFFICE_RADIUS_METERS of the office."""
-    return haversine(lat, lon, OFFICE_LAT, OFFICE_LON) <= OFFICE_RADIUS_METERS
 
 def is_checkin_allowed(current_time: datetime.time) -> bool:
     """Checks if the current time is within allowed check-in windows."""

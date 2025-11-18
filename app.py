@@ -2,177 +2,25 @@ import uvicorn
 import csv
 import io
 import mysql.connector
-import os
 from contextlib import asynccontextmanager
-from datetime import datetime, date, time, timedelta
-from math import radians, cos, sin, asin, sqrt
-from typing import Optional, List, Dict
+from datetime import datetime, date, timedelta
 
 from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 # --- Local Imports ---
 import config
-from employees import users as static_users # For initial data reference
+from employees import users as static_users 
+from data import get_db_connection ,fetch_attendance_for_today ,fetch_all_employees ,fetch_employee_by_email
 from services import calculate_working_days_and_leaves_for_employee, is_at_office
+from schema import  initialize_database_schema 
 
 # ===========================================================================
-# LIFESPAN MANAGER (Handles Startup/Shutdown)
+# FastAPI APP INITIALIZATION
 # ===========================================================================
-
-def initialize_database_schema():
-    """Initializes the database schema."""
-    try:
-        conn = mysql.connector.connect(
-            host=config.DB_HOST, user=config.DB_USER, password=config.DB_PASSWORD, port=config.DB_PORT
-        )
-        cursor = conn.cursor()
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{config.DB_NAME}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-        cursor.execute(f"USE `{config.DB_NAME}`")
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS attendance (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT, user_email VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-                action ENUM('check-in','check-out') NOT NULL, event_time DATETIME NOT NULL,
-                latitude DECIMAL(10,7) NULL, longitude DECIMAL(10,7) NULL,
-                location_text VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL, INDEX idx_user_time (user_email, event_time)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        """)
-        # Create employee_details table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS employee_details (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-                email VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci UNIQUE NOT NULL,
-                password VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL, 
-                photo VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'profile.jpg',
-                job_role VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'Employee',
-                phone VARCHAR(20),
-                parent_phone VARCHAR(20),
-                dob VARCHAR(50),
-                gender VARCHAR(50),
-                employee_number VARCHAR(50) UNIQUE,
-                aadhar VARCHAR(50),
-                joining_date VARCHAR(50),
-                native VARCHAR(255),
-                address TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-                pan_card VARCHAR(50),
-                bank_details TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-                salary VARCHAR(50),
-                total_leave INT DEFAULT 0,
-                total_working INT DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        """)
-
-        # Create tasks table separately (avoid multi-statement execution)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tasks (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                title VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-                description TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-                assigned_to VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-                assigned_by VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-                status ENUM('todo', 'in_progress', 'completed') DEFAULT 'todo',
-                due_date DATE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                FOREIGN KEY (assigned_to) REFERENCES employee_details(email),
-                FOREIGN KEY (assigned_by) REFERENCES employee_details(email)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        """)
-
-        # Create notifications table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS notifications (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                recipient_email VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-                message TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-                task_id INT,
-                type ENUM('task_assigned', 'task_updated', 'task_completed') DEFAULT 'task_assigned',
-                is_read BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_recipient (recipient_email),
-                INDEX idx_read_status (recipient_email, is_read),
-                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-        """)
-
-        # Commit schema changes before performing further queries
-        conn.commit()
-
-        # Use a fresh cursor for subsequent SELECT/INSERTs to ensure no pending results
-        try:
-            cursor2 = conn.cursor()
-            cursor2.execute("SELECT 1 FROM employee_details WHERE email = %s LIMIT 1", (config.HR_EMAIL,))
-            hr_row = cursor2.fetchone()
-            if not hr_row:
-                default_hr_password = os.getenv("HR_PASSWORD", "zugo@123")
-                # Insert a minimal HR user record
-                cursor2.execute(
-                    "INSERT INTO employee_details (name, email, password, job_role) VALUES (%s, %s, %s, %s)",
-                    ("HR", config.HR_EMAIL, default_hr_password, "HR Manager")
-                )
-                conn.commit()
-                print(f"Inserted default HR account: {config.HR_EMAIL}")
-            cursor2.close()
-        except Exception as _e:
-            print(f"Warning: could not ensure HR account exists: {_e}")
-
-        # Seed employee data from employees.py
-        try:
-            cursor3 = conn.cursor()
-            for email, user_data in static_users.items():
-                # Skip HR account
-                if email == config.HR_EMAIL:
-                    continue
-                    
-                # Check if employee already exists
-                cursor3.execute("SELECT email FROM employee_details WHERE email = %s", (email,))
-                if cursor3.fetchone():
-                    continue  # Employee already exists, skip
-                
-                # Extract all available data
-                name = user_data.get("name", "")
-                password = user_data.get("password", "zugo@123")
-                photo = user_data.get("photo", "profile.jpg")
-                phone = user_data.get("phone")
-                parent_phone = user_data.get("parent_phone")
-                dob = user_data.get("dob")
-                gender = user_data.get("gender")
-                employee_number = user_data.get("employee_number")
-                aadhar = user_data.get("aadhar")
-                joining_date = user_data.get("joining_date")
-                native = user_data.get("native")
-                address = user_data.get("address")
-                job_role = user_data.get("job_role", "Employee")
-                pan_card = user_data.get("pan_card")
-                bank_details = user_data.get("bank_details")
-                salary = user_data.get("salary")
-                
-                cursor3.execute(
-                    """INSERT INTO employee_details 
-                       (name, email, password, photo, phone, parent_phone, dob, gender, 
-                        employee_number, aadhar, joining_date, native, address, job_role, pan_card, bank_details, salary)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                    (name, email, password, photo, phone, parent_phone, dob, gender,
-                     employee_number, aadhar, joining_date, native, address, job_role, pan_card, bank_details, salary)
-                )
-            conn.commit()
-            cursor3.close()
-            print("Employee data seeding complete.")
-        except Exception as _e:
-            print(f"Warning: could not seed employee data: {_e}")
-
-        cursor.close()
-        conn.close()
-        print("Database schema initialization complete.")
-    except mysql.connector.Error as err:
-        print(f"Error during DB initialization: {err}")
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -181,193 +29,35 @@ async def lifespan(app: FastAPI):
     yield
     print("Application shutdown...")
 
-
-# ===========================================================================
-# FastAPI APP INITIALIZATION
-# ===========================================================================
-
 app = FastAPI(title="Zugo Attendance Management System", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key="a_very_secret_key_change_me")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
-# ===========================================================================
-# DATABASE SETUP & DEPENDENCY
-# ===========================================================================
+# # ===========================================================================
+# # DATABASE SETUP & DEPENDENCY
+# # ===========================================================================
 
-def get_db_connection():
-    """Dependency to get a database connection."""
-    try:
-        conn = mysql.connector.connect(
-            host=config.DB_HOST,
-            port=config.DB_PORT,
-            user=config.DB_USER,
-            password=config.DB_PASSWORD,
-            database=config.DB_NAME
-        )
-        yield conn
-    except mysql.connector.Error as err:
-        raise HTTPException(status_code=500, detail=f"Database connection failed: {err}")
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            conn.close()
-
-
-# Database initialization is now handled by the lifespan manager
+# def get_db_connection():
+#     """Dependency to get a database connection."""
+#     try:
+#         conn = mysql.connector.connect(
+#             host=config.DB_HOST,
+#             port=config.DB_PORT,
+#             user=config.DB_USER,
+#             password=config.DB_PASSWORD,
+#             database=config.DB_NAME
+#         )
+#         yield conn
+#     except mysql.connector.Error as err:
+#         raise HTTPException(status_code=500, detail=f"Database connection failed: {err}")
+#     finally:
+#         if 'conn' in locals() and conn.is_connected():
+#             conn.close()
 
 
-# ===========================================================================
-# SERVICE FUNCTIONS (Business Logic)
-# ===========================================================================
-
-def is_at_office(lat: float, lon: float) -> bool:
-    """Check if a location is within the office radius."""
-    def haversine(lat1, lon1, lat2, lon2):
-        R = 6371000  # Earth radius in meters
-        dlat = radians(lat2 - lat1)
-        dlon = radians(lon2 - lon1)
-        a = sin(dlat / 2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2)**2
-        c = 2 * asin(sqrt(a))
-        return R * c
-    return haversine(lat, lon, config.OFFICE_LAT, config.OFFICE_LON) <= config.OFFICE_RADIUS_METERS
-
-
-# ===========================================================================
-# DATABASE UTILITY FUNCTIONS
-# ===========================================================================
-
-def fetch_employee_by_email(db: mysql.connector.MySQLConnection, email: str) -> Optional[Dict]:
-    cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM employee_details WHERE email = %s", (email,))
-    employee = cursor.fetchone()
-    cursor.close()
-    
-    # If employee exists but has missing fields, fill them from static_users
-    if employee:
-        static_user = static_users.get(email)
-        if static_user:
-            # Fill in any missing/null fields from static data
-            if not employee.get("phone"):
-                employee["phone"] = static_user.get("phone")
-            if not employee.get("parent_phone"):
-                employee["parent_phone"] = static_user.get("parent_phone")
-            if not employee.get("dob"):
-                employee["dob"] = static_user.get("dob")
-            if not employee.get("gender"):
-                employee["gender"] = static_user.get("gender")
-            if not employee.get("employee_number"):
-                employee["employee_number"] = static_user.get("employee_number")
-            if not employee.get("aadhar"):
-                employee["aadhar"] = static_user.get("aadhar")
-            if not employee.get("joining_date"):
-                employee["joining_date"] = static_user.get("joining_date")
-            if not employee.get("native"):
-                employee["native"] = static_user.get("native")
-            if not employee.get("address"):
-                employee["address"] = static_user.get("address")
-            if not employee.get("photo") or employee.get("photo") == "profile.jpg":
-                employee["photo"] = static_user.get("photo", "profile.jpg")
-            if not employee.get("job_role"):
-                employee["job_role"] = static_user.get("job_role", "Employee")
-    
-    return employee
-
-
-def fetch_attendance_for_today(db: mysql.connector.MySQLConnection, user_email: str) -> List[Dict]:
-    cursor = db.cursor(dictionary=True)
-    today = date.today()
-    cursor.execute(
-        "SELECT * FROM attendance WHERE user_email = %s AND DATE(event_time) = %s",
-        (user_email, today)
-    )
-    records = cursor.fetchall()
-    cursor.close()
-    return records
-    
-
-def fetch_all_employees(db: mysql.connector.MySQLConnection) -> List[Dict]:
-    cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM employee_details WHERE email != %s", (config.HR_EMAIL,))
-    employees = cursor.fetchall()
-    cursor.close()
-
-    # If DB has no rows yet, fall back to the static `employees` data (employees.py)
-    if not employees:
-        try:
-            # `static_users` is imported from `employees` as `static_users` at the top
-            employees = [
-                {
-                    "name": u.get("name"),
-                    "email": k,
-                    "photo": u.get("photo", "profile.jpg"),
-                    "phone": u.get("phone"),
-                    "employee_number": u.get("employee_number"),
-                    "job_role": u.get("job_role", "Employee")
-                }
-                for k, u in static_users.items()
-                if k and k != config.HR_EMAIL
-            ]
-        except Exception:
-            employees = []
-    else:
-        # If employees exist in DB, merge with static data to fill null fields
-        for emp in employees:
-            email = emp.get("email")
-            if email and email in static_users:
-                static_user = static_users[email]
-                # Fill in any missing/null fields from static data
-                if not emp.get("phone"):
-                    emp["phone"] = static_user.get("phone")
-                if not emp.get("parent_phone"):
-                    emp["parent_phone"] = static_user.get("parent_phone")
-                if not emp.get("dob"):
-                    emp["dob"] = static_user.get("dob")
-                if not emp.get("gender"):
-                    emp["gender"] = static_user.get("gender")
-                if not emp.get("employee_number"):
-                    emp["employee_number"] = static_user.get("employee_number")
-                if not emp.get("aadhar"):
-                    emp["aadhar"] = static_user.get("aadhar")
-                if not emp.get("joining_date"):
-                    emp["joining_date"] = static_user.get("joining_date")
-                if not emp.get("native"):
-                    emp["native"] = static_user.get("native")
-                if not emp.get("address"):
-                    emp["address"] = static_user.get("address")
-                if not emp.get("photo") or emp.get("photo") == "profile.jpg":
-                    emp["photo"] = static_user.get("photo", "profile.jpg")
-                if not emp.get("job_role"):
-                    emp["job_role"] = static_user.get("job_role", "Employee")
-
-    return employees
-
-
-def fetch_notifications_for_user(db: mysql.connector.MySQLConnection, user_email: str) -> List[Dict]:
-    """Fetch unread notifications for a user."""
-    cursor = db.cursor(dictionary=True)
-    cursor.execute(
-        """SELECT id, recipient_email, message, task_id, type, is_read, created_at 
-           FROM notifications 
-           WHERE recipient_email = %s AND is_read = FALSE 
-           ORDER BY created_at DESC LIMIT 10""",
-        (user_email,)
-    )
-    notifications = cursor.fetchall()
-    cursor.close()
-    return notifications
-
-
-def mark_notification_as_read(db: mysql.connector.MySQLConnection, notification_id: int):
-    """Mark a notification as read."""
-    cursor = db.cursor()
-    cursor.execute(
-        "UPDATE notifications SET is_read = TRUE WHERE id = %s",
-        (notification_id,)
-    )
-    db.commit()
-    cursor.close()
-
+# # Database initialization is now handled by the lifespan manager
 
 # ===========================================================================
 # API ROUTTES (ENDPOINTS)
@@ -990,7 +680,7 @@ async def hr_management(request: Request, db: mysql.connector.MySQLConnection = 
     # Fetch all employees EXCEPT HR email
     cursor = db.cursor(dictionary=True)
     cursor.execute(
-        "SELECT * FROM employee_details WHERE email != %s ORDER BY name ASC",
+        "SELECT * FROM employee_details WHERE email != %s ORDER BY name ASC",      
         (config.HR_EMAIL,)
     )
     employees = cursor.fetchall()
@@ -1011,7 +701,7 @@ async def hr_management(request: Request, db: mysql.connector.MySQLConnection = 
         "user_email": user_email
     })
 
-
+    
 # =================================================================
 # MAIN EXECUTION
 # ==============================================================================
