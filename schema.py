@@ -1,9 +1,6 @@
 import mysql.connector
 import os
 import config
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
 from employees import users as static_users 
 
 # ===========================================================================
