@@ -16,11 +16,11 @@
             <ul>
                 <li><a href="{{ url_for('logout') }}">Home page</a></li>
                 <li><a href="{{ url_for('dashboard_view') }}">Overview</a></li>
-                <li class="active"><a href="{{ url_for('employees_page') }}">Employee's</a></li>
+                <li><a href="{{ url_for('employees_page') }}">Employee's</a></li>
                 <li><a href="{{ url_for('report') }}">Attendance</a></li>
                 <li><a href="{{ url_for('workspace') }}">Tasks</a></li>
                 {% if is_hr %}
-                <li><a href="{{ url_for('hr_management') }}" style="color: #e74c3c; font-weight: bold;">Management</a></li>
+                <li class="active"><a href="{{ url_for('hr_management') }}" style="color: #e74c3c; font-weight: bold;">Management</a></li>
                 {% endif %}
             </ul>
 
@@ -224,7 +224,7 @@
         }
 
         function viewDetails(email) {
-            // Open detailed view page (can redirect or open modal)
+            // Open detailed view page
             window.location.href = `/employee/${encodeURIComponent(email)}`;
         }
         {% endif %}

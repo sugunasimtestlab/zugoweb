@@ -21,7 +21,7 @@ users = {
         "total_working": 0 # Will be calculated
     },
     "zugopvtnetwork@gmail.com": { # HR Account - Sindhu G
-        "password": "sindhu@123",
+        "password": "zugo@123",
         "name": "SINDHU G",
         "email": "sindhugnanasekaran609@gmail.com",
         "photo": "sindhu.jpeg", 

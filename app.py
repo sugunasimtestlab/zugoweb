@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-# --- Local Imports ---
+#  --- Local Imports ---
 import config
 from employees import users as static_users 
 from data import get_db_connection ,fetch_attendance_for_today ,fetch_all_employees ,fetch_employee_by_email
@@ -34,34 +34,6 @@ app.add_middleware(SessionMiddleware, secret_key="a_very_secret_key_change_me")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-
-# # ===========================================================================
-# # DATABASE SETUP & DEPENDENCY
-# # ===========================================================================
-
-# def get_db_connection():
-#     """Dependency to get a database connection."""
-#     try:
-#         conn = mysql.connector.connect(
-#             host=config.DB_HOST,
-#             port=config.DB_PORT,
-#             user=config.DB_USER,
-#             password=config.DB_PASSWORD,
-#             database=config.DB_NAME
-#         )
-#         yield conn
-#     except mysql.connector.Error as err:
-#         raise HTTPException(status_code=500, detail=f"Database connection failed: {err}")
-#     finally:
-#         if 'conn' in locals() and conn.is_connected():
-#             conn.close()
-
-
-# # Database initialization is now handled by the lifespan manager
-
-# ===========================================================================
-# API ROUTTES (ENDPOINTS)
-# ===========================================================================
 
 @app.get("/", response_class=HTMLResponse, summary="Display login page")
 async def login_page(request: Request):
@@ -554,8 +526,11 @@ async def employees_page(request: Request, db: mysql.connector.MySQLConnection =
     # Get current user's role
     is_hr = user_email == config.HR_EMAIL
     
-    # Get employees list
+    # Get employees list (excludes HR)
     all_employees = fetch_all_employees(db)
+    
+    # Extra safety: filter out any HR employees that somehow made it through
+    all_employees = [emp for emp in all_employees if emp.get("email") != config.HR_EMAIL]
     
     # Add presence information
     try:
@@ -700,6 +675,112 @@ async def hr_management(request: Request, db: mysql.connector.MySQLConnection = 
         "is_hr": True,
         "user_email": user_email
     })
+
+
+# ===========================================================================
+# EMPLOYEE MANAGEMENT ENDPOINTS (HR ONLY)
+# ===========================================================================
+
+@app.get("/api/employee/{email}", summary="Get employee details by email")
+async def get_employee_api(email: str, request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
+    """API endpoint to fetch employee details for editing."""
+    user_email = request.session.get("user_email")
+    if not user_email or user_email != config.HR_EMAIL:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    employee = fetch_employee_by_email(db, email)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    return employee
+
+
+@app.post("/manage-employee", response_class=RedirectResponse, summary="Add or edit employee")
+async def manage_employee(
+    request: Request,
+    action: str = Form(...),
+    name: str = Form(...),
+    new_email: str = Form(...),
+    password: str = Form(None),
+    phone: str = Form(None),
+    employee_number: str = Form(None),
+    job_role: str = Form("Employee"),
+    dob: str = Form(None),
+    salary: str = Form(None),
+    email: str = Form(None),
+    db: mysql.connector.MySQLConnection = Depends(get_db_connection)
+):
+    """Handle adding or editing employees (HR only)."""
+    user_email = request.session.get("user_email")
+    if not user_email or user_email != config.HR_EMAIL:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    
+    try:
+        cursor = db.cursor()
+        
+        if action == "add":
+            # Insert new employee
+            cursor.execute(
+                """INSERT INTO employee_details 
+                   (name, email, password, phone, employee_number, job_role, dob, salary)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                (name, new_email, password or "zugo@123", phone, employee_number, job_role, dob, salary)
+            )
+            db.commit()
+            
+        elif action == "edit":
+            # Update existing employee
+            if password:
+                cursor.execute(
+                    """UPDATE employee_details 
+                       SET name = %s, phone = %s, employee_number = %s, job_role = %s, dob = %s, salary = %s, password = %s
+                       WHERE email = %s""",
+                    (name, phone, employee_number, job_role, dob, salary, password, email)
+                )
+            else:
+                cursor.execute(
+                    """UPDATE employee_details 
+                       SET name = %s, phone = %s, employee_number = %s, job_role = %s, dob = %s, salary = %s
+                       WHERE email = %s""",
+                    (name, phone, employee_number, job_role, dob, salary, email)
+                )
+            db.commit()
+        
+        cursor.close()
+        
+    except mysql.connector.Error as err:
+        print(f"Database error: {err}")
+        return RedirectResponse(url=f"/hr-management?error=Database error", status_code=status.HTTP_303_SEE_OTHER)
+    
+    return RedirectResponse(url="/hr-management?success=Employee saved", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/delete-employee", response_class=RedirectResponse, summary="Delete employee")
+async def delete_employee(
+    request: Request,
+    email: str = Form(...),
+    db: mysql.connector.MySQLConnection = Depends(get_db_connection)
+):
+    """Delete an employee (HR only)."""
+    user_email = request.session.get("user_email")
+    if not user_email or user_email != config.HR_EMAIL:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    
+    # Prevent deleting HR account
+    if email == config.HR_EMAIL:
+        return RedirectResponse(url="/hr-management?error=Cannot delete HR account", status_code=status.HTTP_303_SEE_OTHER)
+    
+    try:
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM employee_details WHERE email = %s", (email,))
+        db.commit()
+        cursor.close()
+        
+    except mysql.connector.Error as err:
+        print(f"Database error: {err}")
+        return RedirectResponse(url=f"/hr-management?error=Database error", status_code=status.HTTP_303_SEE_OTHER)
+    
+    return RedirectResponse(url="/hr-management?success=Employee deleted", status_code=status.HTTP_303_SEE_OTHER)
 
     
 # =================================================================
