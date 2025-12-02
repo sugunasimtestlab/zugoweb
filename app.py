@@ -1,7 +1,7 @@
 import uvicorn
 import csv
 import io
-import mysql.connector
+import mysql.connector  
 from contextlib import asynccontextmanager
 from datetime import datetime, date, timedelta
 
@@ -36,7 +36,7 @@ templates = Jinja2Templates(directory="templates")
 
 
 @app.get("/", response_class=HTMLResponse, summary="Display login page")
-async def login_page(request: Request):
+async def login_page(request: Request): 
     """Serves the login page."""
     return templates.TemplateResponse("login.html", {"request": request})
 
@@ -175,18 +175,21 @@ async def dashboard_view(request: Request, db: mysql.connector.MySQLConnection =
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
     # Redirect HR to HR Management page instead of employee dashboard
-    if user_email == config.HR_EMAIL:
-        return RedirectResponse(url="/hr-management", status_code=status.HTTP_303_SEE_OTHER)
+    # if user_email == config.HR_EMAIL:
+    #     return RedirectResponse(url="/hr-management", status_code=status.HTTP_303_SEE_OTHER)
 
     user = fetch_employee_by_email(db, user_email) or _build_user_from_static(user_email)
     if not user:
         request.session.clear()
         return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
-    # Dashboard no longer includes attendance log (it's on /report)
+    is_hr = user_email == config.HR_EMAIL
+
+    # Dashboard shows profile details for both HR and employees
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "user": user,
+        "is_hr": is_hr,
         "error": request.query_params.get("error"),
         "success": request.query_params.get("success")
     })
@@ -659,15 +662,27 @@ async def hr_management(request: Request, db: mysql.connector.MySQLConnection = 
         (config.HR_EMAIL,)
     )
     employees = cursor.fetchall()
-    cursor.close()
     
-    # Merge with static data to get salary info
+    # Add presence information for today
+    today = date.today()
     for emp in employees:
+        email = emp.get("email")
+        if email:
+            # Check if employee has checked in today
+            cursor.execute(
+                "SELECT 1 FROM attendance WHERE user_email = %s AND DATE(event_time) = %s LIMIT 1",
+                (email, today)
+            )
+            emp["present_today"] = bool(cursor.fetchone())
+        
+        # Add salary info from static data
         static_data = static_users.get(emp['email'], {})
         if 'salary' in static_data:
             emp['salary'] = static_data['salary']
         else:
             emp['salary'] = 'Not Set'
+    
+    cursor.close()
     
     return templates.TemplateResponse("hr_management.html", {
         "request": request,
@@ -701,13 +716,13 @@ async def manage_employee(
     action: str = Form(...),
     name: str = Form(...),
     new_email: str = Form(...),
-    password: str = Form(None),
-    phone: str = Form(None),
-    employee_number: str = Form(None),
-    job_role: str = Form("Employee"),
-    dob: str = Form(None),
-    salary: str = Form(None),
-    email: str = Form(None),
+    password: str = Form(default=""),
+    phone: str = Form(default=""),
+    employee_number: str = Form(default=""),
+    job_role: str = Form(default="Employee"),
+    dob: str = Form(default=""),
+    salary: str = Form(default=""),
+    email: str = Form(default=""),
     db: mysql.connector.MySQLConnection = Depends(get_db_connection)
 ):
     """Handle adding or editing employees (HR only)."""
@@ -781,6 +796,357 @@ async def delete_employee(
         return RedirectResponse(url=f"/hr-management?error=Database error", status_code=status.HTTP_303_SEE_OTHER)
     
     return RedirectResponse(url="/hr-management?success=Employee deleted", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ===========================================================================
+# MANUAL ATTENDANCE ENDPOINT (HR ONLY)
+# ===========================================================================
+
+@app.post("/manual-attendance", response_class=RedirectResponse, summary="Add manual attendance record")
+async def manual_attendance(
+    request: Request,
+    employee_email: str = Form(...),
+    attendance_date: str = Form(...),
+    attendance_time: str = Form(...),
+    action: str = Form(...),
+    db: mysql.connector.MySQLConnection = Depends(get_db_connection)
+):
+    """Allow HR to manually add attendance records for employees."""
+    # Check HR authorization
+    user_email = request.session.get("user_email")
+    if not user_email or user_email != config.HR_EMAIL:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    
+    try:
+        # Validate employee exists
+        employee = fetch_employee_by_email(db, employee_email)
+        if not employee:
+            return RedirectResponse(
+                url="/hr-management?error=Employee not found",
+                status_code=status.HTTP_303_SEE_OTHER
+            )
+        
+        # Validate action
+        if action not in ["check-in", "check-out"]:
+            return RedirectResponse(
+                url="/hr-management?error=Invalid action",
+                status_code=status.HTTP_303_SEE_OTHER
+            )
+        
+        # Parse date and time
+        try:
+            event_date = datetime.strptime(attendance_date, "%Y-%m-%d").date()
+            event_time = datetime.strptime(attendance_time, "%H:%M").time()
+            event_datetime = datetime.combine(event_date, event_time)
+        except ValueError:
+            return RedirectResponse(
+                url="/hr-management?error=Invalid date or time format",
+                status_code=status.HTTP_303_SEE_OTHER
+            )
+        
+        # Insert attendance record
+        cursor = db.cursor()
+        cursor.execute(
+            """INSERT INTO attendance (user_email, action, event_time, latitude, longitude, location_text)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (employee_email, action, event_datetime, None, None, "Manual Entry by HR")
+        )
+        db.commit()
+        cursor.close()
+        
+        print(f"Manual attendance added: {employee_email} - {action} at {event_datetime} by {user_email}")
+        
+        return RedirectResponse(
+            url="/hr-management?success=Attendance record added successfully",
+            status_code=status.HTTP_303_SEE_OTHER
+        )
+        
+    except mysql.connector.Error as err:
+        print(f"Database error in manual_attendance: {err}")
+        return RedirectResponse(
+            url="/hr-management?error=Database error occurred: " + str(err),
+            status_code=status.HTTP_303_SEE_OTHER
+        )
+    except Exception as err:
+        print(f"Error in manual_attendance: {err}")
+        return RedirectResponse(
+            url="/hr-management?error=An error occurred: " + str(err),
+            status_code=status.HTTP_303_SEE_OTHER
+        )
+
+
+# ===========================================================================
+# BILLING ENDPOINTS (HR ONLY)
+# ===========================================================================
+
+@app.get("/billing", response_class=HTMLResponse, summary="Billing & Invoices Page")
+async def billing(request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
+    """HR-only page for managing invoices and billing."""
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    
+    # Check if user is HR
+    if user_email != config.HR_EMAIL:
+        return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    
+    # Fetch all invoices
+    cursor = db.cursor(dictionary=True)
+    cursor.execute(
+        """SELECT * FROM invoices ORDER BY date DESC"""
+    )
+    invoices = cursor.fetchall()
+    
+    # Fetch all GST bills
+    cursor.execute(
+        """SELECT * FROM gst_bills ORDER BY date DESC"""
+    )
+    gst_bills = cursor.fetchall()
+    cursor.close()
+    
+    return templates.TemplateResponse("billing.html", {
+        "request": request,
+        "invoices": invoices or [],
+        "gst_bills": gst_bills or [],
+        "is_hr": True,
+        "user_email": user_email,
+        "error": request.query_params.get("error"),
+        "success": request.query_params.get("success")
+    })
+
+
+@app.post("/create-invoice", response_class=RedirectResponse, summary="Create or update invoice")
+async def create_invoice(
+    request: Request,
+    action: str = Form(...),
+    invoice_id: str = Form(default=""),
+    invoice_no: str = Form(...),
+    invoice_date: str = Form(...),
+    vendor_name: str = Form(...),
+    vendor_gstin: str = Form(default=""),
+    vendor_address: str = Form(default=""),
+    customer_name: str = Form(...),
+    customer_gstin: str = Form(default=""),
+    customer_address: str = Form(default=""),
+    description: str = Form(...),
+    quantity: float = Form(...),
+    rate: float = Form(...),
+    cgst: float = Form(...),
+    sgst: float = Form(...),
+    invoice_status: str = Form(default="draft"),
+    notes: str = Form(default=""),
+    db: mysql.connector.MySQLConnection = Depends(get_db_connection)
+):
+    """Create or update an invoice (HR only)."""
+    user_email = request.session.get("user_email")
+    if not user_email or user_email != config.HR_EMAIL:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    
+    try:
+        cursor = db.cursor()
+        
+        if action == "create":
+            cursor.execute(
+                """
+                INSERT INTO invoices 
+                (invoice_no, date, vendor_name, vendor_gstin, vendor_address, 
+                 customer_name, customer_gstin, customer_address, description, 
+                 quantity, rate, cgst, sgst, status, notes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (invoice_no, invoice_date, vendor_name, vendor_gstin, vendor_address,
+                 customer_name, customer_gstin, customer_address, description,
+                 quantity, rate, cgst, sgst, invoice_status, notes)
+            )
+        else:  # update
+            cursor.execute(
+                """
+                UPDATE invoices 
+                SET invoice_no=%s, date=%s, vendor_name=%s, vendor_gstin=%s, vendor_address=%s,
+                    customer_name=%s, customer_gstin=%s, customer_address=%s, description=%s,
+                    quantity=%s, rate=%s, cgst=%s, sgst=%s, status=%s, notes=%s
+                WHERE id=%s
+                """,
+                (invoice_no, invoice_date, vendor_name, vendor_gstin, vendor_address,
+                 customer_name, customer_gstin, customer_address, description,
+                 quantity, rate, cgst, sgst, invoice_status, notes, invoice_id)
+            )
+        
+        db.commit()
+        cursor.close()
+        
+        return RedirectResponse(url="/billing?success=Invoice+saved+successfully", status_code=status.HTTP_303_SEE_OTHER)
+        
+    except mysql.connector.Error as err:
+        print(f"Database error: {err}")
+        return RedirectResponse(url="/billing?error=Database+error", status_code=status.HTTP_303_SEE_OTHER)
+    except Exception as err:
+        print(f"Error: {err}")
+        return RedirectResponse(url="/billing?error=An+error+occurred", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.get("/api/invoice/{invoice_id}", summary="Get invoice details")
+async def get_invoice_api(invoice_id: str, request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
+    """API endpoint to fetch invoice details."""
+    user_email = request.session.get("user_email")
+    if not user_email or user_email != config.HR_EMAIL:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM invoices WHERE id = %s", (invoice_id,))
+    invoice = cursor.fetchone()
+    cursor.close()
+    
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    return invoice
+
+
+@app.post("/delete-invoice/{invoice_id}", summary="Delete invoice")
+async def delete_invoice(invoice_id: str, request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
+    """Delete an invoice (HR only)."""
+    user_email = request.session.get("user_email")
+    if not user_email or user_email != config.HR_EMAIL:
+        return {"success": False, "error": "Unauthorized"}
+    
+    try:
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM invoices WHERE id = %s", (invoice_id,))
+        db.commit()
+        cursor.close()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/invoice/{invoice_id}", response_class=HTMLResponse, summary="View invoice")
+async def view_invoice(invoice_id: str, request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
+    """View detailed invoice page."""
+    user_email = request.session.get("user_email")
+    if not user_email or user_email != config.HR_EMAIL:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM invoices WHERE id = %s", (invoice_id,))
+    invoice = cursor.fetchone()
+    cursor.close()
+    
+    if not invoice:
+        return RedirectResponse(url="/billing?error=Invoice+not+found", status_code=status.HTTP_303_SEE_OTHER)
+    
+    # Calculate tax amounts
+    taxable_value = (invoice['rate'] * invoice['quantity']) / (1 + (invoice['cgst'] + invoice['sgst']) / 100)
+    cgst_amount = (taxable_value * invoice['cgst']) / 100
+    sgst_amount = (taxable_value * invoice['sgst']) / 100
+    total_amount = invoice['rate'] * invoice['quantity']
+    
+    return templates.TemplateResponse("invoice_view.html", {
+        "request": request,
+        "invoice": invoice,
+        "taxable_value": taxable_value,
+        "cgst_amount": cgst_amount,
+        "sgst_amount": sgst_amount,
+        "total_amount": total_amount,
+        "is_hr": True
+    })
+
+
+# ===========================================================================
+# GST BILLS ENDPOINTS (HR ONLY)
+# ===========================================================================
+
+@app.post("/create-gst-bill", response_class=RedirectResponse, summary="Create or update GST bill")
+async def create_gst_bill(
+    request: Request,
+    action: str = Form(...),
+    bill_id: str = Form(default=""),
+    bill_no: str = Form(...),
+    bill_date: str = Form(...),
+    vendor_name: str = Form(...),
+    vendor_gstin: str = Form(...),
+    amount: float = Form(...),
+    cgst: float = Form(...),
+    sgst: float = Form(...),
+    total_with_gst: float = Form(...),
+    description: str = Form(default=""),
+    bill_status: str = Form(default="received"),
+    db: mysql.connector.MySQLConnection = Depends(get_db_connection)
+):
+    """Create or update a GST bill (HR only)."""
+    user_email = request.session.get("user_email")
+    if not user_email or user_email != config.HR_EMAIL:
+        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    
+    try:
+        cursor = db.cursor()
+        
+        if action == "create":
+            cursor.execute(
+                """
+                INSERT INTO gst_bills 
+                (bill_no, date, vendor_name, vendor_gstin, amount, cgst, sgst, total_with_gst, description, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (bill_no, bill_date, vendor_name, vendor_gstin, amount, cgst, sgst, total_with_gst, description, bill_status)
+            )
+        else:  # update
+            cursor.execute(
+                """
+                UPDATE gst_bills 
+                SET bill_no=%s, date=%s, vendor_name=%s, vendor_gstin=%s, amount=%s,
+                    cgst=%s, sgst=%s, total_with_gst=%s, description=%s, status=%s
+                WHERE id=%s
+                """,
+                (bill_no, bill_date, vendor_name, vendor_gstin, amount, cgst, sgst, total_with_gst, description, bill_status, bill_id)
+            )
+        
+        db.commit()
+        cursor.close()
+        
+        return RedirectResponse(url="/billing?success=GST+Bill+saved+successfully", status_code=status.HTTP_303_SEE_OTHER)
+        
+    except mysql.connector.Error as err:
+        print(f"Database error: {err}")
+        return RedirectResponse(url="/billing?error=Database+error", status_code=status.HTTP_303_SEE_OTHER)
+    except Exception as err:
+        print(f"Error: {err}")
+        return RedirectResponse(url="/billing?error=An+error+occurred", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.get("/api/gst-bill/{bill_id}", summary="Get GST bill details")
+async def get_gst_bill_api(bill_id: str, request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
+    """API endpoint to fetch GST bill details."""
+    user_email = request.session.get("user_email")
+    if not user_email or user_email != config.HR_EMAIL:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM gst_bills WHERE id = %s", (bill_id,))
+    bill = cursor.fetchone()
+    cursor.close()
+    
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    
+    return bill
+
+
+@app.post("/delete-gst-bill/{bill_id}", summary="Delete GST bill")
+async def delete_gst_bill(bill_id: str, request: Request, db: mysql.connector.MySQLConnection = Depends(get_db_connection)):
+    """Delete a GST bill (HR only)."""
+    user_email = request.session.get("user_email")
+    if not user_email or user_email != config.HR_EMAIL:
+        return {"success": False, "error": "Unauthorized"}
+    
+    try:
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM gst_bills WHERE id = %s", (bill_id,))
+        db.commit()
+        cursor.close()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
     
 # =================================================================

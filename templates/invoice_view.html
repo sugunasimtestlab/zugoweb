@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Invoice - {{ invoice.invoice_no }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='invoice.css') }}" />
+</head>
+<body>
+    <div class="invoice-actions">
+        <button class="btn-print" onclick="window.print()">🖨️ Print Invoice</button>
+        <button class="btn-download" onclick="downloadInvoicePDF()">⬇️ Download PDF</button>
+        <button class="btn-save" onclick="saveInvoice()">💾 Save</button>
+        <button class="btn-cancel" onclick="window.history.back()">✕ Cancel</button>
+    </div>
+
+    <div class="invoice-container">
+        <h2>Tax Invoice</h2>
+
+        <!-- Seller Buyer Table -->
+        <table class="header-table">
+            <tr>
+                <td width="50%">
+                    <strong>ZUGO PRIVATE LIMITED</strong><br>
+                    11(3), PN Road, 4th street, Tiruppur<br>
+                    Tamil Nadu -641603<br>
+                    GSTIN/UIN: 33AACCZ6800E1ZM<br>
+                    State: Tamil Nadu, Code: 33
+                </td>
+
+                <td width="50%">
+                    <table class="no-border">
+                        <tr>
+                            <td><strong>Invoice No.</strong></td>
+                            <td>{{ invoice.invoice_no }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Dated</strong></td>
+                            <td>{{ invoice.date }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Status</strong></td>
+                            <td>
+                                <span class="status-badge {% if invoice.status == 'paid' %}paid{% elif invoice.status == 'pending' %}pending{% else %}draft{% endif %}">
+                                    {{ invoice.status | upper }}
+                                </span>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        <!-- Consignee & Buyer -->
+        <table class="address-table">
+            <tr>
+                <td width="50%">
+                    <strong>Consignee (Ship to)</strong><br>
+                    {{ invoice.customer_name }}<br>
+                    {% if invoice.customer_address %}
+                        {{ invoice.customer_address | replace('\n', '<br>') }}<br>
+                    {% endif %}
+                    {% if invoice.customer_gstin %}
+                        GSTIN/UIN: {{ invoice.customer_gstin }}<br>
+                    {% endif %}
+                </td>
+                <td width="50%">
+                    <strong>Buyer (Bill to)</strong><br>
+                    {{ invoice.customer_name }}<br>
+                    {% if invoice.customer_address %}
+                        {{ invoice.customer_address | replace('\n', '<br>') }}<br>
+                    {% endif %}
+                    {% if invoice.customer_gstin %}
+                        GSTIN/UIN: {{ invoice.customer_gstin }}<br>
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
+
+        <!-- Items Table -->
+        <table class="items-table">
+            <tr class="section-title">
+                <th>Sl No.</th>
+                <th>Description of Goods</th>
+                <th>Quantity</th>
+                <th>Rate (Incl. of Tax)</th>
+                <th>Amount</th>
+            </tr>
+
+            <tr>
+                <td class="center">1</td>
+                <td>{{ invoice.description }}</td>
+                <td class="center">{{ invoice.quantity }}</td>
+                <td class="right">₹ {{ "%.2f" | format(invoice.rate / invoice.quantity) }}</td>
+                <td class="right">₹ {{ "%.2f" | format(taxable_value) }}</td>
+            </tr>
+
+            <tr>
+                <td colspan="4" class="right"><strong>CGST ({{ invoice.cgst }}%)</strong></td>
+                <td class="right">₹ {{ cgst_amount }}</td>
+            </tr>
+
+            <tr>
+                <td colspan="4" class="right"><strong>SGST ({{ invoice.sgst }}%)</strong></td>
+                <td class="right">₹ {{ sgst_amount }}</td>
+            </tr>
+
+            <tr class="total-row">
+                <th colspan="4" class="right"><strong>Total</strong></th>
+                <th class="right">₹ {{ total_amount }}</th>
+            </tr>
+        </table>
+
+        <!-- Amount in Words -->
+        <p><strong>Amount Chargeable (in words):</strong> INR {{ total_amount | replace('.', ' Point ') }}</p>
+
+        <!-- Tax Summary -->
+        <table class="tax-table">
+            <tr class="section-title">
+                <th>Taxable Value</th>
+                <th>CGST Rate</th>
+                <th>CGST Amount</th>
+                <th>SGST Rate</th>
+                <th>SGST Amount</th>
+                <th>Total Tax Amount</th>
+            </tr>
+
+            <tr>
+                <td class="right">₹ {{ taxable_value }}</td>
+                <td class="center">{{ invoice.cgst }}%</td>
+                <td class="right">₹ {{ cgst_amount }}</td>
+                <td class="center">{{ invoice.sgst }}%</td>
+                <td class="right">₹ {{ sgst_amount }}</td>
+                <td class="right">₹ {{ "%.2f" | format(float(cgst_amount) + float(sgst_amount)) }}</td>
+            </tr>
+        </table>
+
+        <!-- Notes -->
+        {% if invoice.notes %}
+        <p><strong>Notes:</strong> {{ invoice.notes }}</p>
+        {% endif %}
+
+        <!-- Declaration -->
+        <p>
+            <strong>Declaration:</strong> We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
+        </p>
+
+        <div class="stamp">
+            <strong>for ZUGO PRIVATE LIMITED</strong><br><br><br>
+            Authorised Signatory
+        </div>
+
+    </div>
+</body>
+</html>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script>
+    function downloadInvoicePDF() {
+        const invoiceContainer = document.querySelector('.invoice-container');
+        const invoiceNo = document.querySelector('.invoice-container').innerText.match(/Invoice No\.\s+(\S+)/)[1] || 'invoice';
+        
+        const opt = {
+            margin: 10,
+            filename: `Invoice_${invoiceNo}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
+        };
+
+        html2pdf().set(opt).from(invoiceContainer).save();
+    }
+
+    function saveInvoice() {
+        // Get the invoice number from the page
+        const invoiceNo = document.querySelector('h2').nextElementSibling.innerText;
+        
+        // Show confirmation message
+        alert('Invoice saved successfully!');
+        
+        // Optionally redirect to billing page
+        setTimeout(() => {
+            window.location.href = '/billing?success=Invoice+saved+successfully';
+        }, 500);
+    }
+
+    // Disable download and save buttons during printing
+    window.addEventListener('beforeprint', function() {
+        document.querySelectorAll('.btn-download, .btn-save, .btn-cancel').forEach(btn => {
+            btn.disabled = true;
+        });
+    });
+
+    window.addEventListener('afterprint', function() {
+        document.querySelectorAll('.btn-download, .btn-save, .btn-cancel').forEach(btn => {
+            btn.disabled = false;
+        });
+    });
+</script>

@@ -21,6 +21,7 @@
                 <li><a href="{{ url_for('workspace') }}">Tasks</a></li>
                 {% if is_hr %}
                 <li class="active"><a href="{{ url_for('hr_management') }}" style="color: #e74c3c; font-weight: bold;">Management</a></li>
+                <li><a href="{{ url_for('billing') }}" style="color: #27ae60; font-weight: bold;">Billing</a></li>
                 {% endif %}
             </ul>
 
@@ -43,12 +44,27 @@
                 </div>
             </header>
 
+            <!-- Success/Error Messages -->
+            {% if request.query_params.get('success') %}
+            <div class="alert alert-success">
+                ✓ {{ request.query_params.get('success') }}
+                <span onclick="this.parentElement.style.display='none';" style="cursor:pointer; float:right;">×</span>
+            </div>
+            {% endif %}
+            {% if request.query_params.get('error') %}
+            <div class="alert alert-error">
+                ✗ {{ request.query_params.get('error') }}
+                <span onclick="this.parentElement.style.display='none';" style="cursor:pointer; float:right;">×</span>
+            </div>
+            {% endif %}
+
             <section class="employee-section">
                 <div class="employee-header">
                     <h2>{{ "Employee Management" if is_hr else "Employee Directory" }}</h2>
                     {% if is_hr %}
                     <div class="buttons">
                         <button class="btn-green" onclick="openAddEmployeeModal()">Add New Employee</button>
+                        <button class="btn-blue" onclick="openManualAttendanceModal()">Manual Attendance</button>
                     </div>
                     {% endif %}
                 </div>
@@ -59,13 +75,11 @@
                             <tr>
                                 <th>Employee ID</th>
                                 <th>Employee Name</th>
-                                <th>Email</th>
                                 <th>Phone</th>
                                 <th>Role</th>
+                                <th>Total Working days</th>
                                 <th>Present Today</th>
                                 {% if is_hr %}
-                                <th>Salary</th>
-                                <th>Actions</th>
                                 {% endif %}
                             </tr>
                         </thead>
@@ -74,21 +88,17 @@
                             <tr>
                                 <td>{{ employee.employee_number or 'N/A' }}</td>
                                 <td>{{ employee.name }}</td>
-                                <td>{{ employee.email }}</td>
                                 <td>{{ employee.phone or 'N/A' }}</td>
                                 <td>{{ employee.job_role or 'Employee' }}</td>
+                                <td>{{ employee.total_working }}</td>
                                 <td>
                                     {% if employee.present_today %}
                                     <span class="status-badge present">Present</span>
-                                    {% else %}
+                                     {% else %}
                                     <span class="status-badge absent">Absent</span>
                                     {% endif %}
                                 </td>
                                 {% if is_hr %}
-                                <td>₹{{ employee.salary or 'Not Set' }}</td>
-                                <td class="actions">
-                                    <button onclick="editEmployee('{{ employee.email }}')" class="btn-icon edit"><i>✏️</i></button>
-                                </td>
                                 {% endif %}
                             </tr>
                             {% else %}
@@ -121,7 +131,7 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="password">Password *</label>
+                            <label for="password">Password <span id="passwordLabel">*</span></label>
                             <input type="password" id="password" name="password" required>
                         </div>
                         
@@ -158,8 +168,123 @@
                 </div>
             </div>
             {% endif %}
+
+            <!-- Manual Attendance Modal (HR Only) -->
+            {% if is_hr %}
+            <div id="manualAttendanceModal" class="modal hidden">
+                <div class="modal-content">
+                    <h3>Add Manual Attendance</h3>
+                    <form id="manualAttendanceForm" method="POST" action="{{ url_for('manual_attendance') }}">
+                        
+                        <div class="form-group">
+                            <label for="employee_email">Select Employee *</label>
+                            <select id="employee_email" name="employee_email" required>
+                                <option value="">-- Choose an employee --</option>
+                                {% for employee in employees %}
+                                <option value="{{ employee.email }}">{{ employee.name }} ({{ employee.email }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="attendance_date">Date *</label>
+                            <input type="date" id="attendance_date" name="attendance_date" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="attendance_time">Time (HH:MM) *</label>
+                            <input type="time" id="attendance_time" name="attendance_time" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="action">Action *</label>
+                            <select id="action" name="action" required>
+                                <option value="">-- Choose action --</option>
+                                <option value="check-in">Check-In</option>
+                                <option value="check-out">Check-Out</option>
+                            </select>
+                        </div>
+                        
+                        <div class="modal-actions">
+                            <button type="button" onclick="closeManualAttendanceModal()" class="btn btn-outline">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Add Attendance</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
         </main>
     </div>
+
+    <style>
+        .btn-green {
+            background-color: #27ae60;
+            color: white;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        .btn-green:hover {
+            background-color: #229954;
+        }
+
+        .btn-blue {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-left: 8px;
+            transition: background-color 0.3s;
+        }
+
+        .btn-blue:hover {
+            background-color: #2980b9;
+        }
+
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: white;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+        }
+
+        .alert {
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
 
     <script>
         // Search functionality
@@ -185,6 +310,8 @@
             document.getElementById('formAction').value = 'add';
             document.getElementById('editEmail').value = '';
             document.getElementById('email').disabled = false;
+            document.getElementById('password').required = true;
+            document.getElementById('passwordLabel').textContent = '*';
             
             modal.classList.remove('hidden');
         }
@@ -197,6 +324,8 @@
             document.getElementById('editEmail').value = email;
             document.getElementById('formAction').value = 'edit';
             document.getElementById('email').disabled = true;
+            document.getElementById('password').required = false;
+            document.getElementById('passwordLabel').textContent = '(optional)';
             
             // Fetch employee details via AJAX
             fetch(`/api/employee/${encodeURIComponent(email)}`)
@@ -209,7 +338,7 @@
                     document.getElementById('role').value = emp.job_role || 'Employee';
                     document.getElementById('dob').value = emp.dob || '';
                     document.getElementById('salary').value = emp.salary || '';
-                    document.getElementById('password').value = ''; // Don't show password
+                    document.getElementById('password').value = '';
                 })
                 .catch(err => {
                     alert('Error loading employee details: ' + err);
@@ -220,6 +349,21 @@
 
         function closeModal() {
             document.getElementById('employeeModal').classList.add('hidden');
+        }
+
+        function openManualAttendanceModal() {
+            const modal = document.getElementById('manualAttendanceModal');
+            document.getElementById('manualAttendanceForm').reset();
+            
+            // Set today's date as default
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('attendance_date').value = today;
+            
+            modal.classList.remove('hidden');
+        }
+
+        function closeManualAttendanceModal() {
+            document.getElementById('manualAttendanceModal').classList.add('hidden');
         }
 
         function viewDetails(email) {

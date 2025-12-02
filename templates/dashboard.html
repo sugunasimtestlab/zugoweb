@@ -87,7 +87,9 @@
             <li><a href="{{ url_for('logout') }}">Home page</a></li>
             <li><a href="{{ url_for('dashboard_view') }}">Overview</a></li>
             <li><a href="{{ url_for('employees_page') }}">Employee's</a></li>
+            {% if not is_hr %}
             <li class="active"><a href="{{ url_for('report') }}">Attendance</a></li>
+            {% endif %}
             <li><a href="{{ url_for('workspace') }}">Tasks</a></li>
             {% if is_hr %}
             <li><a href="{{ url_for('hr_management') }}" style="color: #e74c3c; font-weight: bold;">Management</a></li>
@@ -180,6 +182,7 @@
       </div>
 
       <div class="button-container">
+        {% if not is_hr %}
         <form method="POST" action="/attendance" onsubmit="return setLocationAndSubmit(this)">
           <input type="hidden" name="action" value="check-in">
           <input type="hidden" id="latitude_checkin" name="latitude">
@@ -189,6 +192,11 @@
           <input type="hidden" id="latitude_checkout" name="latitude">
           <input type="hidden" id="longitude_checkout" name="longitude">    
         </form>
+        {% else %}
+        <div style="text-align:center; color: #7f8c8d; font-size: 14px; padding: 20px;">
+          <p>HR users can manage attendance through the <strong>Management</strong> tab</p>
+        </div>
+        {% endif %}
       </div>
 
     </div> <!-- end main-content -->

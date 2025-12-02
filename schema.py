@@ -85,6 +85,54 @@ def initialize_database_schema():
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         """)
 
+        # Create invoices table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS invoices (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                invoice_no VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci UNIQUE NOT NULL,
+                date DATE NOT NULL,
+                vendor_name VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+                vendor_gstin VARCHAR(50),
+                vendor_address TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                customer_name VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+                customer_gstin VARCHAR(50),
+                customer_address TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                description TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+                quantity DECIMAL(10,2) NOT NULL,
+                rate DECIMAL(12,2) NOT NULL,
+                cgst DECIMAL(5,2) DEFAULT 9.00,
+                sgst DECIMAL(5,2) DEFAULT 9.00,
+                status ENUM('draft', 'pending', 'paid') DEFAULT 'draft',
+                notes TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_date (date),
+                INDEX idx_status (status)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        """)
+
+        # Create GST Bills table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS gst_bills (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                bill_no VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci UNIQUE NOT NULL,
+                date DATE NOT NULL,
+                vendor_name VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+                vendor_gstin VARCHAR(50) NOT NULL,
+                amount DECIMAL(12,2) NOT NULL,
+                cgst DECIMAL(5,2) DEFAULT 9.00,
+                sgst DECIMAL(5,2) DEFAULT 9.00,
+                total_with_gst DECIMAL(12,2) NOT NULL,
+                description TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+                status ENUM('received', 'verified', 'processed') DEFAULT 'received',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_bill_no (bill_no),
+                INDEX idx_date (date),
+                INDEX idx_status (status)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        """)
+
         # Commit schema changes before performing further queries
         conn.commit()
 

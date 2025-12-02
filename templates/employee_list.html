@@ -62,11 +62,13 @@
                                 <th>Email</th>
                                 <th>Phone</th>
                                 <th>Role</th>
-                                <th>Present Today</th>
                                 {% if is_hr %}
+                                <th>Aadhar Number</th>
+                                <th>Joining Date</th>
                                 <th>Salary</th>
-                                <th>Actions</th>
+                                <th>Parent Number</th>
                                 {% endif %}
+                                <th>Present Today</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -77,19 +79,20 @@
                                 <td>{{ employee.email }}</td>
                                 <td>{{ employee.phone or 'N/A' }}</td>
                                 <td>{{ employee.job_role or 'Employee' }}</td>
+                                </td>
+                                {% if is_hr %}
+                                <td>{{ employee.aadhar }}</td>
+                                <td>{{ employee.joining_date }}</td>
+                                <td>₹{{ employee.salary or 'Not Set' }}</td>
+                                <td>{{ employee.parent_phone }}</td>
+                                </td>
+                                {% endif %}
                                 <td>
                                     {% if employee.present_today %}
                                     <span class="status-badge present">Present</span>
                                     {% else %}
                                     <span class="status-badge absent">Absent</span>
                                     {% endif %}
-                                </td>
-                                {% if is_hr %}
-                                <td>₹{{ employee.salary or 'Not Set' }}</td>
-                                <td class="actions">
-                                    <button onclick="editEmployee('{{ employee.email }}')" class="btn-icon edit"><i>✏️</i></button>
-                                </td>
-                                {% endif %}
                             </tr>
                             {% else %}
                             <tr>

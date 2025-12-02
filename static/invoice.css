@@ -1,0 +1,273 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background: #f7f7f7;
+}
+
+.invoice-actions {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+.invoice-actions {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.btn-print, .btn-download, .btn-save, .btn-cancel, .btn-back {
+    padding: 10px 15px;
+    background: #333;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+.btn-print:hover {
+    background: #555;
+}
+
+.btn-download {
+    background: #27ae60;
+}
+
+.btn-download:hover {
+    background: #229954;
+}
+
+.btn-download:disabled {
+    background: #95a5a6;
+    cursor: not-allowed;
+}
+
+.btn-save {
+    background: #3498db;
+}
+
+.btn-save:hover {
+    background: #2980b9;
+}
+
+.btn-save:disabled {
+    background: #95a5a6;
+    cursor: not-allowed;
+}
+
+.btn-cancel {
+    background: #e74c3c;
+}
+
+.btn-cancel:hover {
+    background: #c0392b;
+}
+
+.btn-cancel:disabled {
+    background: #95a5a6;
+    cursor: not-allowed;
+}
+
+.btn-back {
+    background: #6c757d;
+}
+
+.btn-back:hover {
+    background: #5a6268;
+}
+
+.invoice-container {
+    background: white;
+    padding: 40px;
+    width: 900px;
+    margin: auto;
+    border: 1px solid #ccc;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+h2 {
+    text-align: center;
+    margin-bottom: 30px;
+    text-transform: uppercase;
+    font-size: 24px;
+    color: #333;
+}
+
+/* General Table Styles */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+td, th {
+    border: 1px solid #333;
+    padding: 12px;
+    vertical-align: top;
+}
+
+/* Header Table */
+.header-table td {
+    padding: 15px;
+}
+
+.no-border td,
+.no-border th {
+    border: none !important;
+    padding: 8px;
+}
+
+/* Address Table */
+.address-table {
+    margin-bottom: 20px;
+}
+
+.address-table td {
+    padding: 12px;
+    font-size: 12px;
+}
+
+/* Items Table */
+.items-table {
+    margin: 20px 0;
+}
+
+.items-table th {
+    background: #eaeaea;
+    font-weight: bold;
+    text-align: left;
+}
+
+.section-title {
+    font-weight: bold;
+    background: #eaeaea;
+}
+
+.right {
+    text-align: right;
+}
+
+.center {
+    text-align: center;
+}
+
+.total-row {
+    background: #f0f0f0;
+    font-weight: bold;
+}
+
+.total-row td,
+.total-row th {
+    border: 2px solid #333;
+}
+
+/* Tax Table */
+.tax-table {
+    margin: 20px 0;
+}
+
+.tax-table th {
+    background: #eaeaea;
+    font-weight: bold;
+    text-align: left;
+}
+
+/* Status Badge */
+.status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.status-badge.paid {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.status-badge.pending {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.status-badge.draft {
+    background-color: #e2e3e5;
+    color: #383d41;
+}
+
+/* Content Paragraphs */
+p {
+    margin: 15px 0;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+p strong {
+    font-weight: bold;
+}
+
+/* Stamp Section */
+.stamp {
+    margin-top: 30px;
+    text-align: right;
+    padding-top: 30px;
+    border-top: 1px solid #ddd;
+}
+
+.stamp strong {
+    display: block;
+    margin-bottom: 30px;
+}
+
+/* Print Styles */
+@media print {
+    body {
+        background: white;
+        padding: 0;
+        margin: 0;
+    }
+
+    .invoice-actions {
+        display: none !important;
+    }
+
+    .invoice-container {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        border: none;
+        box-shadow: none;
+    }
+
+    table {
+        page-break-inside: avoid;
+    }
+
+    p {
+        page-break-inside: avoid;
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 1000px) {
+    .invoice-container {
+        width: 95%;
+        padding: 20px;
+    }
+
+    table {
+        font-size: 12px;
+    }
+
+    td, th {
+        padding: 8px;
+    }
+}
